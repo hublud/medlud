@@ -1,0 +1,27 @@
+{
+  "node_version": "v22.18.0",
+  "fetch_available": true,
+  "tests": [
+    {
+      "name": "Anon Key",
+      "status": "SUCCESS",
+      "key_preview": "eyJhbGciOi..."
+    },
+    {
+      "name": "Service Role Key",
+      "status": "FAILED",
+      "error": {
+        "message": ""
+      },
+      "details": {
+        "message": ""
+      },
+      "key_preview": "eyJhbGciOi...",
+      "is_jwt_format": true
+    }
+  ],
+  "fetch_test": {
+    "status": 404,
+    "ok": false
+  }
+}

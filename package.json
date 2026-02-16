@@ -1,0 +1,43 @@
+{
+  "name": "medlud",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.95.3",
+    "@types/twilio": "^3.19.2",
+    "agora-access-token": "^2.0.4",
+    "agora-rtc-sdk-ng": "^4.24.2",
+    "date-fns": "^4.1.0",
+    "dotenv": "^17.2.4",
+    "jspdf": "^4.1.0",
+    "jspdf-autotable": "^5.0.7",
+    "lucide-react": "^0.563.0",
+    "moment": "^2.30.1",
+    "next": "16.1.6",
+    "openai": "^6.21.0",
+    "papaparse": "^5.5.3",
+    "react": "19.2.3",
+    "react-big-calendar": "^1.19.4",
+    "react-dom": "19.2.3",
+    "recharts": "^3.7.0",
+    "twilio": "^5.12.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/papaparse": "^5.5.2",
+    "@types/react": "^19",
+    "@types/react-big-calendar": "^1.16.3",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

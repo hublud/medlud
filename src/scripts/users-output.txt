@@ -1,0 +1,28 @@
+Found 5 Auth Users and 4 Profiles.
+
+--- SYSTEM USERS ---
+Email: patient@medlud.com
+   ID: a8a465be-7d40-4d7f-bcdd-4e32bc856d64
+   Auth Metadata Role: patient
+   DB Profile Role:    patient
+-----------------------------------
+Email: xvaluemedia@gmail.com
+   ID: 06ef6c49-7c7f-4376-842d-e40c28d41edd
+   Auth Metadata Role: admin
+   DB Profile Role:    admin
+-----------------------------------
+Email: mediacontact@gmail.com
+   ID: 46915a56-60d4-40ea-87b5-19945da15e1c
+   Auth Metadata Role: doctor
+   DB Profile Role:    doctor
+-----------------------------------
+Email: informhublud@gmail.com
+   ID: 431ecdd2-56c9-4e20-9da9-0c0c958c65a3
+   Auth Metadata Role: N/A
+   DB Profile Role:    MISSING
+-----------------------------------
+Email: joshuanwamife@gmail.com
+   ID: bca9b7de-643a-48cf-9f75-182831d15ad8
+   Auth Metadata Role: admin
+   DB Profile Role:    admin
+-----------------------------------
