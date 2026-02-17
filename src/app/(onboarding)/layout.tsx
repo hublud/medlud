@@ -19,13 +19,14 @@ export default function OnboardingLayout({
         if (loading) return;
 
         // 1. If finished onboarding, go to dashboard (unless on completion success page)
-        if (user && profile?.onboarding_completed && pathname !== '/completion') {
+        if (user && profile?.onboarding_completed === true && pathname !== '/completion') {
+            console.log('[OnboardingLayout] Profile complete, redirecting to dashboard');
             router.push('/dashboard');
             return;
         }
 
         // 2. If logged in but NOT finished, ensure they are on the right step
-        if (user && !profile?.onboarding_completed) {
+        if (user && profile?.onboarding_completed === false) {
             const currentStep = profile?.onboarding_step || 'health-profile';
             const stepPaths = {
                 'health-profile': '/health-profile',
@@ -39,7 +40,7 @@ export default function OnboardingLayout({
             // Redirect if they land on generic pages (welcome, account-type, login) or wrong step
             const landingPages = ['/welcome', '/account-type', '/login', '/signup'];
             if (landingPages.includes(pathname) || (targetPath && pathname !== targetPath && pathname !== '/completion')) {
-                console.log(`[Onboarding] Redirecting from ${pathname} to current step: ${targetPath}`);
+                console.log(`[OnboardingLayout] Redirecting from ${pathname} to current step: ${targetPath}`);
                 if (targetPath) router.push(targetPath);
             }
 

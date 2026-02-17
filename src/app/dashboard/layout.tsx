@@ -15,14 +15,24 @@ export default function DashboardLayout({
     useEffect(() => {
         if (!loading) {
             const staffRoles = ['doctor', 'nurse', 'nurse-assistant', 'mental-health', 'admin'];
-            const isStaffOrAdmin = profile && staffRoles.includes(profile.role || 'patient');
+            const userRole = profile?.role || 'patient';
+            const isStaffOrAdmin = staffRoles.includes(userRole);
+
+            console.log('[DashboardLayout] Auth State:', {
+                hasUser: !!user,
+                hasProfile: !!profile,
+                role: userRole,
+                onboarding_completed: profile?.onboarding_completed,
+                isStaffOrAdmin
+            });
 
             if (!user) {
-                // Not logged in, go to login
+                console.log('[DashboardLayout] No user found, redirecting to login');
                 router.push('/login');
-            } else if (profile && !profile.onboarding_completed && !isStaffOrAdmin) {
-                // ONLY redirect to onboarding if NOT staff/admin
+            } else if (profile && profile.onboarding_completed === false && !isStaffOrAdmin) {
+                // ONLY redirect to onboarding if NOT staff/admin AND onboarding_completed is EXPLICITLY false
                 let currentStep = profile.onboarding_step || 'health-profile';
+                console.log('[DashboardLayout] Profile incomplete, redirecting to step:', currentStep);
 
                 const stepPaths = {
                     'health-profile': '/health-profile',
@@ -32,9 +42,10 @@ export default function DashboardLayout({
                 };
                 const targetPath = stepPaths[currentStep as keyof typeof stepPaths] || '/health-profile';
                 router.push(targetPath);
+            } else if (profile && profile.onboarding_completed === true) {
+                console.log('[DashboardLayout] Profile complete, staying on dashboard');
             } else if (!profile && user) {
-                // Defensive: If loading is false but profile is missing
-                console.warn('[Dashboard] Auth loading finished but profile still null.');
+                console.warn('[DashboardLayout] Profile missing for authenticated user');
             }
         }
     }, [user, profile, loading, router]);
@@ -50,7 +61,7 @@ export default function DashboardLayout({
         );
     }
 
-    if (!user || !profile || !profile.onboarding_completed) {
+    if (!user || !profile || profile.onboarding_completed === false) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
                 <div className="flex flex-col items-center gap-4">
