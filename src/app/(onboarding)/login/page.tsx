@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { User, Lock, ArrowRight, ChevronLeft } from 'lucide-react';
+import { User, Lock, ArrowRight, ChevronLeft, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 export default function LoginPage() {
@@ -15,6 +15,7 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const [isPending, startTransition] = React.useTransition();
@@ -113,12 +114,22 @@ export default function LoginPage() {
 
                 <Input
                     label="Password"
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     placeholder="Enter your password"
                     required
                     leftIcon={Lock}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    rightElement={
+                        <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="text-text-secondary hover:text-primary transition-colors p-1"
+                            title={showPassword ? 'Hide password' : 'Show password'}
+                        >
+                            {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                        </button>
+                    }
                 />
 
                 <div className="flex justify-end">

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
-import { User, Mail, Phone, Lock, Globe } from 'lucide-react';
+import { User, Mail, Phone, Lock, Globe, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { NIGERIAN_STATES } from '@/lib/constants';
 
@@ -22,6 +22,7 @@ export default function BasicInfoPage() {
         email: '',
         phone: '',
         password: '',
+        showPassword: false,
         country: 'NG',
         state: ''
     });
@@ -118,12 +119,22 @@ export default function BasicInfoPage() {
                 <Input
                     label="Password"
                     name="password"
-                    type="password"
+                    type={formData.showPassword ? 'text' : 'password'}
                     placeholder="••••••••"
                     required
                     leftIcon={Lock}
                     value={formData.password}
                     onChange={handleChange}
+                    rightElement={
+                        <button
+                            type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, showPassword: !prev.showPassword }))}
+                            className="text-text-secondary hover:text-primary transition-colors p-1"
+                            title={formData.showPassword ? 'Hide password' : 'Show password'}
+                        >
+                            {formData.showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                        </button>
+                    }
                 />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
