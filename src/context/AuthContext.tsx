@@ -37,15 +37,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     useEffect(() => {
-        // Safety timeout: Never stay in loading state more than 10s
-        const timer = setTimeout(() => {
-            if (loading) {
-                console.warn('Auth loading timeout reached - forcing state release');
-                setLoading(false);
-            }
-        }, 10000);
+        let safetyTimer: NodeJS.Timeout | null = null;
+
+        const startSafetyTimer = () => {
+            if (safetyTimer) clearTimeout(safetyTimer);
+            safetyTimer = setTimeout(() => {
+                setLoading(currentLoading => {
+                    if (currentLoading) {
+                        console.warn('[Auth] Safety timeout reached - forcing loading to false');
+                        return false;
+                    }
+                    return false;
+                });
+            }, 10000); // 10 second safety cap
+        };
 
         const initAuth = async () => {
+            startSafetyTimer();
             try {
                 const { data: { session }, error } = await supabase.auth.getSession();
                 if (error) throw error;
@@ -55,43 +63,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
                 if (session?.user) {
                     await fetchProfile(session.user.id).catch(err => {
-                        console.warn('Profile fetch failed during init:', err);
+                        console.warn('[Auth] Profile fetch failed during init:', err);
                     });
                 }
             } catch (err) {
-                console.error('Error in auth session load:', err);
+                console.error('[Auth] Error in initial session load:', err);
             } finally {
                 setLoading(false);
-                clearTimeout(timer);
+                if (safetyTimer) clearTimeout(safetyTimer);
             }
         };
 
         initAuth();
 
         // Listen for changes on auth state (sign in, sign out, etc.)
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            setLoading(true); // Reset loading on auth state change to fetch fresh profile
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            console.log(`[Auth] Event: ${event}`);
+
+            // Only trigger full-screen loading for major transitions
+            const shouldShowLoading = event === 'INITIAL_SESSION' || event === 'SIGNED_IN';
+
+            if (shouldShowLoading) {
+                setLoading(true);
+                startSafetyTimer();
+            }
+
             try {
                 setSession(session);
                 setUser(session?.user ?? null);
+
                 if (session?.user) {
                     await fetchProfile(session.user.id).catch(err => {
-                        console.warn('Profile fetch failed during auth change:', err);
+                        console.warn('[Auth] Profile fetch failed during auth change:', err);
                     });
-                } else {
+                } else if (event === 'SIGNED_OUT') {
                     setProfile(null);
                 }
             } catch (err) {
-                console.error('Error in auth state change:', err);
+                console.error('[Auth] Error in auth state change:', err);
             } finally {
-                setLoading(false);
-                clearTimeout(timer);
+                if (shouldShowLoading) {
+                    setLoading(false);
+                    if (safetyTimer) clearTimeout(safetyTimer);
+                }
             }
         });
 
         return () => {
             subscription.unsubscribe();
-            clearTimeout(timer);
+            if (safetyTimer) clearTimeout(safetyTimer);
         };
     }, []);
 
