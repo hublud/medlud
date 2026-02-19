@@ -3,6 +3,7 @@
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { Button } from '@/components/ui/Button';
 
 export default function DashboardLayout({
     children,
@@ -66,10 +67,28 @@ export default function DashboardLayout({
 
     if (!user || !profile || profile.onboarding_completed === false) {
         return (
-            <div className="min-h-screen bg-background flex items-center justify-center">
-                <div className="flex flex-col items-center gap-4">
-                    <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-                    <p className="text-text-secondary font-medium">Verifying account...</p>
+            <div className="min-h-screen bg-background flex items-center justify-center p-6">
+                <div className="flex flex-col items-center gap-6 text-center max-w-sm">
+                    <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                    <div className="space-y-4">
+                        <p className="text-text-primary text-xl font-bold">Verifying account...</p>
+                        <p className="text-text-secondary text-sm">
+                            We're setting up your workspace. This usually takes just a few seconds.
+                        </p>
+                        <div className="pt-4 flex flex-col gap-3">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => window.location.reload()}
+                                className="w-full"
+                            >
+                                Refresh Page
+                            </Button>
+                            <p className="text-[10px] text-text-secondary">
+                                If you're stuck here, try clearing your browser cache or logging out and back in.
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
         );
