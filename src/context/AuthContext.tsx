@@ -24,50 +24,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<Session | null>(null);
     const [loading, setLoading] = useState(true);
 
-    const fetchProfile = async (userId: string) => {
-        try {
-            console.log(`[Auth] Fetching profile for: ${userId}`);
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
+    const fetchProfile = async (userId: string, attempts = 3) => {
+        for (let i = 1; i <= attempts; i++) {
+            try {
+                console.log(`[Auth] Fetching profile for: ${userId} (Attempt ${i}/${attempts})`);
 
-            if (error) {
-                // PGRST116 is the code for "JSON object requested, but no rows returned"
-                if (error.code === 'PGRST116') {
-                    console.warn('[Auth] Profile missing - creating default profile');
-                    const { data: userData } = await supabase.auth.getUser();
-                    const newProfile = {
-                        id: userId,
-                        email: userData.user?.email,
-                        role: 'patient',
-                        onboarding_completed: false,
-                        updated_at: new Date().toISOString()
-                    };
+                const fetchPromise = supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', userId)
+                    .single();
 
-                    const { data: createdData, error: createError } = await supabase
-                        .from('profiles')
-                        .insert(newProfile)
-                        .select()
-                        .single();
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
+                );
 
-                    if (createError) {
-                        console.error('[Auth] Failed to create default profile:', createError);
-                        throw createError;
+                const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
+
+                if (error) {
+                    if (error.code === 'PGRST116') {
+                        console.warn('[Auth] Profile missing - creating default profile');
+                        const { data: userData } = await supabase.auth.getUser();
+                        const newProfile = {
+                            id: userId,
+                            email: userData.user?.email,
+                            role: 'patient',
+                            onboarding_completed: false,
+                            updated_at: new Date().toISOString()
+                        };
+
+                        const { data: createdData, error: createError } = await supabase
+                            .from('profiles')
+                            .insert(newProfile)
+                            .select()
+                            .single();
+
+                        if (createError) {
+                            console.error('[Auth] Failed to create default profile:', createError);
+                            throw createError;
+                        }
+
+                        console.log('[Auth] Default profile created successfully');
+                        setProfile(createdData);
+                        return; // Success
                     }
-
-                    console.log('[Auth] Default profile created successfully');
-                    setProfile(createdData);
-                } else {
-                    console.error('[Auth] Profile fetch error:', error);
                     throw error;
                 }
-            } else if (data) {
-                setProfile(data);
+
+                if (data) {
+                    setProfile(data);
+                    return; // Success
+                }
+            } catch (err: any) {
+                const isAbort = err.name === 'AbortError' || err.message?.includes('aborted');
+                console.warn(`[Auth] Profile fetch attempt ${i} ${isAbort ? 'timed out' : 'failed'}:`, err.message || err);
+
+                if (i === attempts) {
+                    console.error('[Auth] All profile fetch attempts failed');
+                } else {
+                    // Wait before retrying (exponential backoff: 1s, 2s)
+                    await new Promise(r => setTimeout(r, 1000 * i));
+                }
             }
-        } catch (err) {
-            console.error('[Auth] Fatal error in fetchProfile:', err);
         }
     };
 
