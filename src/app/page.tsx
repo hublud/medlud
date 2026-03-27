@@ -45,7 +45,6 @@ export default function LandingPage() {
               <a href="#features" className="text-sm font-medium text-text-secondary hover:text-primary transition-colors">Features</a>
               <a href="#services" className="text-sm font-medium text-text-secondary hover:text-primary transition-colors">Services</a>
               <a href="#about" className="text-sm font-medium text-text-secondary hover:text-primary transition-colors">About</a>
-              <a href="#donate" className="text-sm font-medium text-text-secondary hover:text-primary transition-colors">Donate</a>
             </div>
 
             <div className="flex items-center space-x-1.5 sm:space-x-4">
@@ -74,7 +73,6 @@ export default function LandingPage() {
               <a href="#features" onClick={() => setIsMenuOpen(false)} className="block px-3 py-4 text-base font-medium text-text-primary hover:bg-gray-50 rounded-lg">Features</a>
               <a href="#services" onClick={() => setIsMenuOpen(false)} className="block px-3 py-4 text-base font-medium text-text-primary hover:bg-gray-50 rounded-lg">Services</a>
               <a href="#about" onClick={() => setIsMenuOpen(false)} className="block px-3 py-4 text-base font-medium text-text-primary hover:bg-gray-50 rounded-lg">About</a>
-              <a href="#donate" onClick={() => setIsMenuOpen(false)} className="block px-3 py-4 text-base font-medium text-text-primary hover:bg-gray-50 rounded-lg">Donate</a>
               <div className="pt-4 flex flex-col gap-3">
                 <Link href="/login" onClick={() => setIsMenuOpen(false)}>
                   <Button variant="outline" className="w-full">Log In</Button>
@@ -342,125 +340,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Donation Section */}
-      <section id="donate" className="py-16 lg:py-24 bg-primary/5">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-primary/10">
-            <div className="bg-primary p-8 sm:p-12 text-center text-white">
-              <h2 className="text-3xl sm:text-4xl font-extrabold mb-4">💛 Support MedLud</h2>
-              <p className="text-xl sm:text-2xl font-medium opacity-90 max-w-2xl mx-auto">
-                Help Us Make Healthcare Accessible for Everyone
-              </p>
-            </div>
 
-            <div className="p-8 sm:p-12 space-y-12">
-              <div className="text-center space-y-6">
-                <p className="text-lg text-text-secondary leading-relaxed">
-                  MedLud is building intelligent, life-saving digital healthcare tools for Nigerians and underserved communities.
-                  From maternal health support to AI symptom checking, emergency alerts, and telemedicine — our mission is simple:
-                </p>
-                <p className="text-xl font-bold text-primary">
-                  No one should be denied healthcare because of cost.
-                </p>
-              </div>
-
-              <div className="grid md:grid-cols-2 gap-12">
-                <div className="space-y-6">
-                  <h3 className="text-xl font-bold text-text-primary flex items-center gap-2">
-                    <span className="text-2xl">🌍</span> Why Your Support Matters
-                  </h3>
-                  <div className="text-text-secondary space-y-4">
-                    <p>
-                      MedLud is currently fully funded by <span className="font-semibold text-text-primary">HUBLUD Technology Ltd</span>.
-                      As we expand, we are committed to making this solution affordable — especially for:
-                    </p>
-                    <ul className="space-y-2 pl-2">
-                      {['Low-income families', 'Rural communities', 'Pregnant women without access to regular care', 'Individuals who cannot afford private consultation'].map((item, i) => (
-                        <li key={i} className="flex items-start gap-2">
-                          <CheckCircle2 size={18} className="text-primary mt-1 shrink-0" />
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                <div className="space-y-6">
-                  <h3 className="text-xl font-bold text-text-primary flex items-center gap-2">
-                    <span className="text-2xl">✅</span> Your Donation Helps Us
-                  </h3>
-                  <ul className="space-y-3 text-text-secondary">
-                    {[
-                      'Subsidize consultations for low-income users',
-                      'Support maternal and emergency health features',
-                      'Maintain secure servers and AI infrastructure',
-                      'Improve access to verified doctors and nurses',
-                      'Continue building safe, ethical AI healthcare tools'
-                    ].map((item, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <CheckCircle2 size={18} className="text-emerald-500 mt-1 shrink-0" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-
-              <div className="bg-gray-50 rounded-2xl p-6 sm:p-8 border border-gray-200">
-                <div className="text-center mb-8">
-                  <h3 className="text-2xl font-bold text-text-primary mb-2">❤️ Make a Donation</h3>
-                  <p className="text-text-secondary">If you would like to support this mission, kindly make a transfer to:</p>
-                </div>
-
-                <div className="max-w-md mx-auto space-y-4 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                    <span className="text-sm text-text-secondary font-medium">Bank Name</span>
-                    <span className="font-bold text-text-primary text-right">United Bank For Africa (UBA)</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                    <span className="text-sm text-text-secondary font-medium">Account Name</span>
-                    <span className="font-bold text-text-primary text-right">HUBLUD TECHNOLOGY LTD</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                    <span className="text-sm text-text-secondary font-medium">Account Number</span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xl font-bold text-primary">1028147083</span>
-                      {/* Could add copy button here in future */}
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center py-2">
-                    <span className="text-sm text-text-secondary font-medium">Currency</span>
-                    <span className="font-bold text-text-primary">Nigerian Naira (₦)</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-8">
-                <div className="text-center space-y-4 max-w-2xl mx-auto">
-                  <div className="inline-block bg-primary/10 px-4 py-1.5 rounded-full text-primary font-bold text-sm mb-2">
-                    🤝 Transparency & Trust
-                  </div>
-                  <p className="text-text-secondary text-sm">
-                    Medlud is developed and maintained by <span className="font-bold">HUBLUD Technology Ltd</span>, a registered technology company committed to ethical and responsible digital healthcare innovation. We are dedicated to responsible AI use, medical advisory oversight, secure data handling, and transparent operations.
-                  </p>
-                </div>
-
-                <div className="bg-primary/5 rounded-2xl p-8 text-center">
-                  <h3 className="text-xl font-bold text-primary mb-4">🌟 A Small Gift Can Save a Life</h3>
-                  <div className="grid sm:grid-cols-3 gap-4 text-center text-text-secondary font-medium">
-                    <p>You help a mother get guidance.</p>
-                    <p>You help someone access emergency care.</p>
-                    <p>You help someone feel safe.</p>
-                  </div>
-                  <p className="mt-6 text-lg font-bold text-text-primary">Thank you for believing in this vision.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Donation Section */}
 
     </>
   );
