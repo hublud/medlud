@@ -5,27 +5,11 @@ import { Calendar, momentLocalizer, View, Event as BigCalendarEvent } from 'reac
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { supabase } from '@/lib/supabase';
+import { Appointment } from '@/types/appointment';
 
 const localizer = momentLocalizer(moment);
 
-interface Appointment {
-    id: string;
-    title: string;
-    user_id: string;
-    staff_id: string | null;
-    status: string;
-    category: string;
-    created_at: string;
-    scheduled_date?: string;
-    user?: {
-        full_name: string;
-        email: string;
-    };
-    staff?: {
-        full_name: string;
-        email: string;
-    };
-}
+
 
 interface CalendarEvent extends BigCalendarEvent {
     id: string;
@@ -54,19 +38,54 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({
     const loadAppointments = async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
+            // Step 1: Fetch appointments and staff profiles
+            const { data: aptData, error: aptError } = await supabase
                 .from('appointments')
                 .select(`
                     *,
-                    user:profiles!user_id(full_name, email),
                     staff:profiles!staff_id(full_name, email)
                 `)
                 .order('created_at', { ascending: false });
 
-            if (error) throw error;
-            setAppointments(data || []);
-        } catch (error) {
-            console.error('Error loading appointments:', error);
+            if (aptError) {
+                console.error('Supabase error fetching appointments for calendar:', aptError);
+                throw aptError;
+            }
+
+            if (!aptData || aptData.length === 0) {
+                setAppointments([]);
+                return;
+            }
+
+            // Step 2: Fetch user profiles separately
+            const userIds = [...new Set(aptData.map((apt: any) => apt.user_id).filter(Boolean))];
+
+            let userProfiles: Record<string, any> = {};
+            if (userIds.length > 0) {
+                const { data: profilesData, error: profilesError } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, email')
+                    .in('id', userIds);
+
+                if (profilesError) {
+                    console.error('Error fetching user profiles for calendar:', profilesError);
+                } else {
+                    profilesData?.forEach(p => {
+                        userProfiles[p.id] = p;
+                    });
+                }
+            }
+
+            // Step 3: Map data together
+            const mappedData: Appointment[] = aptData.map((apt: any) => ({
+                ...apt,
+                user: userProfiles[apt.user_id] || null,
+                staff: Array.isArray(apt.staff) ? apt.staff[0] : apt.staff
+            }));
+
+            setAppointments(mappedData);
+        } catch (error: any) {
+            console.error('Error loading appointments for calendar (catch):', error);
         } finally {
             setLoading(false);
         }
@@ -74,8 +93,8 @@ export const AppointmentCalendar: React.FC<AppointmentCalendarProps> = ({
 
     const events: CalendarEvent[] = useMemo(() => {
         return appointments.map(apt => {
-            // Use scheduled_date if available, otherwise use created_at
-            const eventDate = apt.scheduled_date ? new Date(apt.scheduled_date) : new Date(apt.created_at);
+            // Use date field if available, otherwise use created_at
+            const eventDate = apt.date ? new Date(apt.date) : (apt.created_at ? new Date(apt.created_at) : new Date());
 
             return {
                 id: apt.id,

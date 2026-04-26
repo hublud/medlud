@@ -16,6 +16,7 @@ import {
     notifyPatientOfNewMessage,
     notifyPatientOfPrescription
 } from '@/utils/notifications';
+import { notifyNewResponse, notifyPatientOfClaimedCase } from '@/lib/notifications';
 
 export default function CaseReviewPage() {
     const params = useParams();
@@ -26,6 +27,7 @@ export default function CaseReviewPage() {
     const [doctorNotes, setDoctorNotes] = useState('');
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
     const dummyUserRef = useRef<string | null>(null); // To store current user ID
 
     useEffect(() => {
@@ -56,11 +58,26 @@ export default function CaseReviewPage() {
         }
     }, [params.id]);
 
-    const fetchCaseDetails = async (id: string) => {
+    // Polling fallback
+    useEffect(() => {
+        if (!params.id) return;
+        
+        const interval = setInterval(() => {
+            fetchCaseDetails(params.id as string, true);
+        }, 30000); // Poll every 30 seconds
+
+        return () => clearInterval(interval);
+    }, [params.id]);
+
+    const fetchCaseDetails = async (id: string, isSilent = false) => {
         try {
-            setLoading(true);
-            const { data: { user } } = await supabase.auth.getUser();
+            if (!isSilent) setLoading(true);
+            const { data: { session } } = await supabase.auth.getSession();
+            const user = session?.user;
             dummyUserRef.current = user?.id || null;
+            if (user?.app_metadata?.role === 'admin') {
+                setIsAdmin(true);
+            }
 
             // Fetch Appointment - simplified query to avoid join issues
             const { data: aptData, error: aptError } = await supabase
@@ -84,7 +101,7 @@ export default function CaseReviewPage() {
                     .single();
 
                 if (patientData) {
-                    appointmentWithPatient.patient = patientData;
+                    (appointmentWithPatient as any).patient = patientData as any;
                 }
                 if (patientError) {
                     console.error('Patient profile fetch error:', JSON.stringify(patientError, null, 2));
@@ -101,7 +118,7 @@ export default function CaseReviewPage() {
                 .order('created_at', { ascending: true });
 
             if (msgError) console.error('Messages fetch error:', JSON.stringify(msgError, null, 2));
-            setChatMessages(msgData || []);
+            setChatMessages(msgData as any || []);
 
         } catch (error: any) {
             console.error('Unexpected error in fetchCaseDetails:', JSON.stringify(error, null, 2));
@@ -139,9 +156,12 @@ export default function CaseReviewPage() {
                 throw error;
             }
 
-            // Notify Patient of new message
+            // Notify Patient of new message (Database & In-app)
             const { data: doctor } = await supabase.from('profiles').select('full_name').eq('id', dummyUserRef.current).single();
             await notifyPatientOfNewMessage(appointment.id, doctor?.full_name || 'Doctor', content);
+
+            // Trigger Email Notification (Server Action)
+            notifyNewResponse(appointment.id, 'DOCTOR', content);
 
         } catch (error: any) {
             console.error('Error sending message:', JSON.stringify(error, null, 2));
@@ -165,7 +185,7 @@ export default function CaseReviewPage() {
 
             // Notify Patient of referral/transfer
             const { data: staff } = await supabase.from('profiles').select('full_name').eq('id', staffId).single();
-            await notifyPatientOfAppointmentEvent(appointment.id, 'REASSIGNED', { doctorName: staff?.full_name });
+            await notifyPatientOfAppointmentEvent(appointment.id, 'REASSIGNED', { doctorName: staff?.full_name || undefined });
 
             router.push('/dashboard/staff');
         } catch (err: any) {
@@ -266,11 +286,14 @@ export default function CaseReviewPage() {
             if (error) {
                 alert('This case has already been claimed by another doctor.');
             } else {
-                // Notify Patient
+                // Notify Patient (Internal)
                 const { data: doctor } = await supabase.from('profiles').select('full_name').eq('id', dummyUserRef.current).single();
                 await notifyPatientOfAppointmentEvent(appointment.id, 'REASSIGNED', {
-                    doctorName: doctor?.full_name
+                    doctorName: doctor?.full_name || undefined
                 });
+
+                // Trigger Email Notification (Server Action)
+                notifyPatientOfClaimedCase(appointment.id);
 
                 fetchCaseDetails(appointment.id);
             }
@@ -318,13 +341,13 @@ export default function CaseReviewPage() {
                                 <ArrowLeft size={16} className="mr-1.5" /> Patient View
                             </Button>
                         </Link>
-                        {appointment.status === 'PENDING' && !appointment.doctor_id ? (
+                        {appointment.status === 'PENDING' && !appointment.doctor_id && !isAdmin ? (
                             <Button onClick={handleClaimCase} className="bg-emerald-600 hover:bg-emerald-700 text-white">
                                 <CheckCircle size={16} className="mr-2" /> Claim Case
                             </Button>
                         ) : (
                             <>
-                                {appointment.doctor_id === dummyUserRef.current && (
+                                {(appointment.doctor_id === dummyUserRef.current || isAdmin) && (
                                     <>
                                         <Button
                                             variant="outline"
@@ -375,11 +398,11 @@ export default function CaseReviewPage() {
                             <div className="grid grid-cols-2 gap-4 text-sm border-t border-gray-100 pt-4">
                                 <div>
                                     <span className="block text-gray-400 text-xs uppercase tracking-wider">Patient Age</span>
-                                    <span className="font-semibold text-gray-900">{calculateAge(appointment.patient?.date_of_birth)}</span>
+                                    <span className="font-semibold text-gray-900">{calculateAge((appointment.patient as any)?.date_of_birth)}</span>
                                 </div>
                                 <div>
                                     <span className="block text-gray-400 text-xs uppercase tracking-wider">Blood Group</span>
-                                    <span className="font-semibold text-gray-900">{appointment.patient?.blood_group || '--'}</span>
+                                    <span className="font-semibold text-gray-900">{(appointment.patient as any)?.blood_group || '--'}</span>
                                 </div>
                             </div>
                         </div>

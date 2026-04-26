@@ -30,9 +30,14 @@ export default function DashboardLayout({
             if (!user) {
                 console.log('[DashboardLayout] No user found, redirecting to login');
                 router.push('/login');
-            } else if (profile && profile.onboarding_completed === false && !isStaffOrAdmin) {
-                // ONLY redirect to onboarding if NOT staff/admin AND onboarding_completed is EXPLICITLY false
+            } else if (userRole === 'admin') {
+                console.log('[DashboardLayout] Admin detected on user dashboard, redirecting to admin panel');
+                router.push('/admin');
+            } else if (profile && profile.onboarding_completed !== true && !isStaffOrAdmin) {
+                // Only redirect to onboarding if NOT staff/admin AND onboarding not completed
                 let currentStep = profile.onboarding_step || 'health-profile';
+                // Rescue users stuck on basic-info or emergency-contact from stale state
+                if (currentStep === 'basic-info') currentStep = 'health-profile';
                 console.log('[DashboardLayout] Profile incomplete, redirecting to step:', currentStep);
 
                 const stepPaths = {
@@ -65,7 +70,7 @@ export default function DashboardLayout({
         );
     }
 
-    if (!user || !profile || profile.onboarding_completed === false) {
+    if (!user || !profile) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center p-6">
                 <div className="flex flex-col items-center gap-6 text-center max-w-sm">

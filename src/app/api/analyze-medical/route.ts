@@ -23,7 +23,7 @@ Limit "suggestedActions" to 3 items.
         `;
 
         const completion = await openai.chat.completions.create({
-            model: 'gpt-4o',
+            model: 'gpt-4o-mini',
             messages: [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: `Analyze the following consultation text:\n\n${consultationText}` }

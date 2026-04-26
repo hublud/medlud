@@ -41,7 +41,7 @@ export default function NearbyHospitalsPage() {
                     <div className="px-8 py-12 text-center space-y-6">
                         <div className="space-y-2">
                             <div className="inline-block px-4 py-1.5 bg-blue-50 text-blue-700 rounded-full text-sm font-bold tracking-wide uppercase mb-2">
-                                In Development
+                                Feature Coming Soon ...
                             </div>
                             <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">
                                 Nearby Hospitals & Clinics

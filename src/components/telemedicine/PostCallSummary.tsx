@@ -73,6 +73,17 @@ export const PostCallSummary: React.FC<PostCallSummaryProps> = ({ callId, onRetu
 
     const doctorName = callData?.provider?.full_name || 'your medical professional';
 
+    let parsedAiSummary: any = null;
+    if (callData?.ai_summary) {
+        try {
+            parsedAiSummary = typeof callData.ai_summary === 'string' 
+                ? JSON.parse(callData.ai_summary) 
+                : callData.ai_summary;
+        } catch (e) {
+            parsedAiSummary = null;
+        }
+    }
+
     return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8 animate-in slide-in-from-bottom-8 duration-500">
             <div className="text-green-500 mb-2">
@@ -98,10 +109,34 @@ export const PostCallSummary: React.FC<PostCallSummaryProps> = ({ callId, onRetu
 
                 {callData?.ai_summary && (
                     <div className="p-4 bg-primary/5 rounded-xl border border-primary/10">
-                        <h4 className="text-[10px] font-bold text-primary uppercase tracking-widest mb-2">AI Clinical Summary</h4>
-                        <p className="text-sm text-gray-700 italic">
-                            {callData.ai_summary}
-                        </p>
+                        <h4 className="text-[10px] font-bold text-primary uppercase tracking-widest mb-4">AI Clinical Summary</h4>
+                        
+                        {parsedAiSummary && typeof parsedAiSummary === 'object' ? (
+                            <div className="space-y-4 text-left">
+                                {parsedAiSummary.case_summary && (
+                                    <div>
+                                        <h5 className="font-semibold text-sm text-gray-800">Case Summary</h5>
+                                        <p className="text-sm text-gray-700 italic">{parsedAiSummary.case_summary}</p>
+                                    </div>
+                                )}
+                                {parsedAiSummary.possible_diagnosis && (
+                                    <div>
+                                        <h5 className="font-semibold text-sm text-gray-800">Possible Diagnosis</h5>
+                                        <p className="text-sm text-gray-700 italic">{parsedAiSummary.possible_diagnosis}</p>
+                                    </div>
+                                )}
+                                {parsedAiSummary.consultation_description && (
+                                    <div>
+                                        <h5 className="font-semibold text-sm text-gray-800">Description</h5>
+                                        <p className="text-sm text-gray-700 italic">{parsedAiSummary.consultation_description}</p>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-gray-700 italic text-left">
+                                {callData.ai_summary}
+                            </p>
+                        )}
                     </div>
                 )}
             </div>

@@ -47,7 +47,7 @@ export const TransferCaseModal: React.FC<TransferCaseModalProps> = ({
             if (error) throw error;
 
             // Filter out current doctor
-            const filteredStaff = data?.filter(s => s.id !== currentDoctorId) || [];
+            const filteredStaff = (data?.filter(s => s.id !== currentDoctorId) || []) as any[];
             setStaff(filteredStaff);
         } catch (error) {
             console.error('Error fetching staff:', error);
@@ -90,8 +90,8 @@ export const TransferCaseModal: React.FC<TransferCaseModalProps> = ({
                                 key={member.id}
                                 onClick={() => setSelectedStaffId(member.id)}
                                 className={`w-full flex items-center justify-between p-3 rounded-lg border transition-all ${selectedStaffId === member.id
-                                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                                        : 'border-gray-100 hover:border-emerald-200 hover:bg-emerald-50/30'
+                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                                    : 'border-gray-100 hover:border-emerald-200 hover:bg-emerald-50/30'
                                     }`}
                             >
                                 <div className="flex items-center gap-3">

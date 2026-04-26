@@ -72,7 +72,7 @@ export async function getStaffMetrics(): Promise<StaffMetrics[]> {
             .eq('staff_id', member.id);
 
         const averageRating = ratings && ratings.length > 0
-            ? ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length
+            ? ratings.reduce((sum, r) => sum + (r.rating || 0), 0) / ratings.length
             : 0;
 
         const completionRate = totalAppointments && totalAppointments > 0
@@ -82,7 +82,7 @@ export async function getStaffMetrics(): Promise<StaffMetrics[]> {
         return {
             staffId: member.id,
             staffName: member.full_name || member.id,
-            role: member.role,
+            role: member.role || 'staff',
             totalAppointments: totalAppointments || 0,
             completedAppointments: completedAppointments || 0,
             averageRating: Math.round(averageRating * 10) / 10,
@@ -113,7 +113,7 @@ export async function getStaffRatings(staffId: string): Promise<StaffRating[]> {
         return [];
     }
 
-    return data || [];
+    return (data || []) as any as StaffRating[];
 }
 
 /**
@@ -157,7 +157,7 @@ export async function getStaffAvailability(staffId: string): Promise<StaffAvaila
         return [];
     }
 
-    return data || [];
+    return (data || []) as any as StaffAvailability[];
 }
 
 /**

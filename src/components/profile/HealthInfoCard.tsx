@@ -69,8 +69,12 @@ export const HealthInfoCard: React.FC<HealthInfoCardProps> = ({ role }) => {
         e.preventDefault();
         if (!newItemText.trim()) return;
 
-        let updatedConditions = profile?.known_conditions ? profile.known_conditions.split(',').map((c: string) => c.trim()) : [];
-        let updatedAllergies = profile?.allergies ? profile.allergies.split(',').map((a: string) => a.trim()) : [];
+        let updatedConditions = profile?.known_conditions 
+            ? profile.known_conditions.split(',').map((c: string) => c.trim()).filter(Boolean) 
+            : [];
+        let updatedAllergies = profile?.allergies 
+            ? profile.allergies.split(',').map((a: string) => a.trim()).filter(Boolean) 
+            : [];
 
         if (modalConfig.type === 'CONDITION') {
             updatedConditions.push(newItemText.trim());
@@ -83,11 +87,25 @@ export const HealthInfoCard: React.FC<HealthInfoCardProps> = ({ role }) => {
             allergies: updatedAllergies.join(', ')
         };
 
-        const { error } = await updateProfile(updates);
+        try {
+            const { error } = await updateProfile(updates);
 
-        if (!error) {
-            closeModal();
-            setNewItemText('');
+            if (error) {
+                console.error('Update failed:', error);
+                alert('Failed to update. Please try again.');
+            } else {
+                closeModal();
+                setNewItemText('');
+                // Optimistically update the local state to see changes immediately
+                if (modalConfig.type === 'CONDITION') {
+                    setConditions(updatedConditions.map((c, i) => ({ id: i, text: c, color: 'orange' })));
+                } else if (modalConfig.type === 'ALLERGY') {
+                    setAllergies(updatedAllergies.map((a, i) => ({ id: i, text: a, color: 'red' })));
+                }
+            }
+        } catch (err: any) {
+            console.error('Unexpected error:', err);
+            alert('Failed to update. Please try again.');
         }
     };
 
@@ -110,7 +128,7 @@ export const HealthInfoCard: React.FC<HealthInfoCardProps> = ({ role }) => {
                             <InfoItem
                                 icon={Calendar}
                                 label="Date of Birth"
-                                value={profile?.date_of_birth ? new Date(profile.date_of_birth).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }) : 'Not Specified'}
+                                value={profile?.date_of_birth ? new Date(profile.date_of_birth).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Not Specified'}
                             />
 
                             {/* Blood Group with Select */}

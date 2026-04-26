@@ -1,32 +1,40 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, X, Loader2 } from 'lucide-react';
+import { AlertTriangle, X, MessageSquare, Phone } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 interface EmergencySOSModalProps {
     isOpen: boolean;
     onClose: () => void;
 }
 
+interface EmergencyContact {
+    name: string;
+    phone: string;
+}
+
 export const EmergencySOSModal: React.FC<EmergencySOSModalProps> = ({ isOpen, onClose }) => {
-    const { user, session } = useAuth();
+    const { user } = useAuth();
     const [countdown, setCountdown] = useState(7);
-    const [sending, setSending] = useState(false);
-    const [sent, setSent] = useState(false);
+    const [isTriggered, setIsTriggered] = useState(false);
+    const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+    const [contact, setContact] = useState<EmergencyContact | null>(null);
+    const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [error, setError] = useState<string | null>(null);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
         if (isOpen) {
             setCountdown(7);
-            setSent(false);
-            setSending(false);
+            setIsTriggered(false);
             setError(null);
+            fetchEmergencyData();
 
             timerRef.current = setInterval(() => {
                 setCountdown((prev) => {
                     if (prev <= 1) {
                         if (timerRef.current) clearInterval(timerRef.current);
-                        sendEmergencyAlert();
+                        setIsTriggered(true);
                         return 0;
                     }
                     return prev - 1;
@@ -41,59 +49,62 @@ export const EmergencySOSModal: React.FC<EmergencySOSModalProps> = ({ isOpen, on
         };
     }, [isOpen]);
 
-    const sendEmergencyAlert = async () => {
-        setSending(true);
+    const fetchEmergencyData = async () => {
+        setIsLoadingProfile(true);
         try {
-            if (!session?.access_token) {
-                throw new Error('Authentication session missing. Please log in again.');
-            }
+            // 1. Fetch Location
+            navigator.geolocation.getCurrentPosition(
+                (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                (err) => console.warn('Location blocked:', err),
+                { timeout: 5000 }
+            );
 
-            // Get location if possible
-            let locationData = { latitude: null as number | null, longitude: null as number | null };
+            // 2. Fetch Profile
+            if (!user) return;
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('full_name, emergency_contact_name, emergency_contact_phone')
+                .eq('id', user.id)
+                .single();
 
-            try {
-                const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-                    navigator.geolocation.getCurrentPosition(resolve, reject, {
-                        enableHighAccuracy: true,
-                        timeout: 5000,
-                        maximumAge: 0
-                    });
+            if (error) throw error;
+            if (data?.emergency_contact_phone) {
+                setContact({
+                    name: data.emergency_contact_name || 'Emergency Contact',
+                    phone: data.emergency_contact_phone
                 });
-                locationData.latitude = position.coords.latitude;
-                locationData.longitude = position.coords.longitude;
-            } catch (locError) {
-                console.warn('Could not get location:', locError);
+            } else {
+                setError('No emergency contact found in your profile.');
             }
-
-            const response = await fetch('/api/emergency/sms', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session.access_token}`
-                },
-                body: JSON.stringify({
-                    userId: user?.id,
-                    latitude: locationData.latitude,
-                    longitude: locationData.longitude
-                }),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                const errorMessage = data.error || 'Failed to send alert';
-                const detailMessage = data.details ? ` (${JSON.stringify(data.details)})` : '';
-                const hintMessage = data.hint ? ` [Hint: ${data.hint}]` : '';
-                throw new Error(errorMessage + detailMessage + hintMessage);
-            }
-
-            setSent(true);
         } catch (err: any) {
-            console.error('SOS Error:', err);
-            setError(err.message || 'Failed to send emergency alert.');
+            console.error('Error fetching emergency data:', err);
+            setError('Failed to load emergency contact details.');
         } finally {
-            setSending(false);
+            setIsLoadingProfile(false);
         }
+    };
+
+    const getSOSMessage = () => {
+        const userName = user?.user_metadata?.full_name || 'I';
+        let msg = `SOS! This is an emergency alert from ${userName}. I need help immediately.`;
+        if (location) {
+            msg += `\n\nMy location: https://www.google.com/maps?q=${location.lat},${location.lng}`;
+        }
+        return encodeURIComponent(msg);
+    };
+
+    const triggerSMS = () => {
+        if (!contact) return;
+        const msg = getSOSMessage();
+        window.location.href = `sms:${contact.phone}?&body=${msg}`;
+    };
+
+    const triggerWhatsApp = () => {
+        if (!contact) return;
+        const msg = getSOSMessage();
+        const cleanPhone = contact.phone.replace(/\D/g, '');
+        const phoneWithSuffix = cleanPhone.startsWith('0') ? `234${cleanPhone.slice(1)}` : cleanPhone;
+        window.open(`https://wa.me/${phoneWithSuffix}?text=${msg}`, '_blank');
     };
 
     const handleCancel = () => {
@@ -103,77 +114,118 @@ export const EmergencySOSModal: React.FC<EmergencySOSModalProps> = ({ isOpen, on
 
     const handleSendNow = () => {
         if (timerRef.current) clearInterval(timerRef.current);
-        sendEmergencyAlert();
+        setIsTriggered(true);
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center transform scale-100 transition-transform">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-300">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 text-center relative overflow-hidden">
+                {!isTriggered && (
+                    <div className="absolute inset-0 bg-red-500/5 animate-pulse pointer-events-none" />
+                )}
 
-                {sending ? (
-                    <div className="py-8 space-y-4">
-                        <Loader2 className="w-16 h-16 text-red-600 animate-spin mx-auto" />
-                        <h2 className="text-xl font-bold text-gray-900">Sending Alert...</h2>
-                        <p className="text-gray-500">Notifying your emergency contact.</p>
-                    </div>
-                ) : sent ? (
-                    <div className="py-8 space-y-4">
-                        <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <span className="text-3xl">✓</span>
-                        </div>
-                        <h2 className="text-xl font-bold text-gray-900">Alert Sent</h2>
-                        <p className="text-gray-600">Your emergency contact has been notified with your location.</p>
-                        <button
-                            onClick={onClose}
-                            className="mt-6 w-full bg-gray-100 hover:bg-gray-200 text-gray-900 font-semibold py-3 rounded-xl transition-colors"
-                        >
-                            Close
-                        </button>
-                    </div>
-                ) : (
+                {!isTriggered ? (
                     <>
-                        <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
-                            <AlertTriangle className="w-10 h-10 text-red-600" />
+                        <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce">
+                            <AlertTriangle className="w-12 h-12 text-red-600" />
                         </div>
 
-                        <h2 className="text-2xl font-bold text-gray-900 mb-2">Emergency SOS</h2>
+                        <h2 className="text-3xl font-black text-gray-900 mb-2">Emergency SOS</h2>
+                        <p className="text-gray-500 text-sm mb-8">Choose contact method in...</p>
 
-                        <div className="my-6">
-                            <div className="text-6xl font-black text-red-600 tabular-nums">
-                                {countdown}
+                        <div className="relative w-32 h-32 mx-auto mb-10">
+                            <svg className="w-full h-full transform -rotate-90">
+                                <circle
+                                    cx="64"
+                                    cy="64"
+                                    r="60"
+                                    stroke="currentColor"
+                                    strokeWidth="8"
+                                    fill="transparent"
+                                    className="text-gray-100"
+                                />
+                                <circle
+                                    cx="64"
+                                    cy="64"
+                                    r="60"
+                                    stroke="currentColor"
+                                    strokeWidth="8"
+                                    fill="transparent"
+                                    strokeDasharray={377}
+                                    strokeDashoffset={377 - (377 * countdown) / 7}
+                                    className="text-red-600 transition-all duration-1000 ease-linear"
+                                />
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <span className="text-5xl font-black text-red-600 tabular-nums">{countdown}</span>
                             </div>
-                            <p className="text-sm text-gray-500 mt-2">Seconds to cancel</p>
                         </div>
 
-                        <p className="text-gray-600 mb-8">
-                            Sending emergency alert with your current location to your designated contact.
-                        </p>
-
-                        <div className="space-y-3">
+                        <div className="space-y-4">
                             <button
                                 onClick={handleCancel}
-                                className="w-full bg-white border-2 border-gray-200 hover:bg-gray-50 text-gray-700 font-bold py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2"
+                                className="w-full bg-white border-2 border-gray-200 hover:bg-gray-50 text-gray-700 font-bold py-4 rounded-2xl transition-all flex items-center justify-center gap-2 active:scale-95"
                             >
                                 <X size={20} />
-                                Cancel Alert
+                                Cancel SOS
                             </button>
 
                             <button
                                 onClick={handleSendNow}
-                                className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-red-200 transition-all active:scale-95"
+                                className="w-full text-red-600 font-bold text-sm hover:underline"
                             >
-                                Send Immediately
+                                Trigger Now
                             </button>
                         </div>
+                    </>
+                ) : (
+                    <div className="animate-in zoom-in duration-300">
+                        <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <Phone className="w-10 h-10 text-primary" />
+                        </div>
+
+                        <h2 className="text-2xl font-bold text-gray-900 mb-2">Choose SOS Method</h2>
+                        <p className="text-gray-600 text-sm mb-8">
+                            {contact ? `Alert ${contact.name}` : 'Select your preferred channel to notify help'}
+                        </p>
 
                         {error && (
-                            <div className="mt-4 text-sm text-red-600 bg-red-50 p-2 rounded">
+                            <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-xs font-medium">
                                 {error}
                             </div>
                         )}
-                    </>
+
+                        <div className="space-y-4">
+                            <button
+                                onClick={triggerSMS}
+                                disabled={!contact}
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <MessageSquare size={22} />
+                                Send via SMS
+                            </button>
+
+                            <button
+                                onClick={triggerWhatsApp}
+                                disabled={!contact}
+                                className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-4 rounded-2xl shadow-lg shadow-green-100 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
+                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                                </svg>
+                                Send via WhatsApp
+                            </button>
+
+                            <button
+                                onClick={onClose}
+                                className="w-full text-gray-400 font-bold py-2 mt-4 text-xs hover:text-gray-600 transition-colors"
+                            >
+                                Dismiss
+                            </button>
+                        </div>
+                    </div>
                 )}
             </div>
         </div>

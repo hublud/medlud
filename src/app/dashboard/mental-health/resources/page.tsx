@@ -46,7 +46,7 @@ export default function MentalHealthResourcesPage() {
                 if (orgsRes.error) throw orgsRes.error;
                 if (tipsRes.error) throw tipsRes.error;
 
-                setCopingTechniques(techRes.data || []);
+                setCopingTechniques(techRes.data as any || []);
                 setOrganizations(orgsRes.data || []);
                 setSelfCareTips(tipsRes.data || []);
             } catch (err: any) {

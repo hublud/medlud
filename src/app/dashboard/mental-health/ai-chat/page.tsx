@@ -7,6 +7,9 @@ import { Button } from '@/components/ui/Button';
 import { assessMentalHealth, RiskLevel } from '@/utils/mentalHealthRiskAssessment';
 import { getCopingTechnique } from '@/data/copingTechniques';
 import { aiService } from '@/services/aiService';
+import { useAuth } from '@/context/AuthContext';
+import { usePlatformSettings } from '@/hooks/usePlatformSettings';
+
 
 interface Message {
     role: 'system' | 'user' | 'ai';
@@ -15,13 +18,17 @@ interface Message {
 }
 
 export default function AITherapyChatPage() {
+    const { user } = useAuth();
+    const { settings } = usePlatformSettings();
     const [step, setStep] = useState<'consent' | 'chat'>('consent');
+
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const [currentRisk, setCurrentRisk] = useState<RiskLevel>('low');
     const [conversationCount, setConversationCount] = useState(0);
     const [showProfessionalPrompt, setShowProfessionalPrompt] = useState(false);
+    const [limitReached, setLimitReached] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -39,7 +46,7 @@ export default function AITherapyChatPage() {
     };
 
     const handleSendMessage = async () => {
-        if (!input.trim()) return;
+        if (!input.trim() || limitReached) return;
 
         const userMessage: Message = {
             role: 'user',
@@ -53,12 +60,10 @@ export default function AITherapyChatPage() {
         setIsTyping(true);
 
         // Local Crisis Assessment (Safety Layer)
-        // We still run this locally to ensure immediate detection of critical keywords without network latency
         const assessment = assessMentalHealth(input);
         setCurrentRisk(assessment.riskLevel);
 
         if (assessment.riskLevel === 'crisis') {
-            // Immediate crisis response override
             const crisisResponse = `${assessment.suggestedResponse}\n\n**Please reach out for immediate help:**\n• Talk to a trusted person right now\n• Contact a mental health professional\n• If you're in immediate danger, go to the nearest hospital\n\nYou deserve support. Let me connect you with someone who can help.`;
 
             setMessages(prev => [...prev, {
@@ -71,9 +76,7 @@ export default function AITherapyChatPage() {
             return;
         }
 
-        // Use OpenAI for conversation if not in crisis
         try {
-            // Prepare messages for API
             const apiMessages = updatedMessages.map(msg => ({
                 role: (msg.role === 'user' ? 'user' : msg.role === 'ai' ? 'assistant' : 'system') as 'user' | 'assistant' | 'system',
                 content: msg.content
@@ -81,7 +84,7 @@ export default function AITherapyChatPage() {
 
             const systemPrompt = "You are a compassionate, empathetic mental health AI support companion. Your goal is to listen, validate feelings, and offer gentle coping strategies. You are NOT a doctor or therapist. DO NOT diagnose. If the user seems to be in danger, urge them to seek professional help. Keep responses concise, warm, and supportive.";
 
-            const response = await aiService.sendMessage(apiMessages, systemPrompt);
+            const response = await aiService.sendMessage(apiMessages, systemPrompt, user?.id);
 
             const aiMessage: Message = {
                 role: 'ai',
@@ -92,18 +95,27 @@ export default function AITherapyChatPage() {
             setMessages(prev => [...prev, aiMessage]);
             setConversationCount(prev => prev + 1);
 
-            // Heuristic to show professional prompt based on assessment risk even if chat continues
             if (assessment.riskLevel === 'moderate' && conversationCount >= 2) {
                 setShowProfessionalPrompt(true);
             }
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("AI Error", error);
-            setMessages(prev => [...prev, {
-                role: 'ai',
-                content: "I'm having trouble connecting right now, but I'm here simply to say: your feelings are valid.",
-                timestamp: new Date()
-            }]);
+
+            if (error.message.includes('limit reached')) {
+                setLimitReached(true);
+                setMessages(prev => [...prev, {
+                    role: 'system',
+                    content: `You have reached your daily limit of ${settings.chat_message_limit} messages. Please come back tomorrow. If you're going through a difficult time, consider speaking with a professional.`,
+                    timestamp: new Date()
+                }]);
+            } else {
+                setMessages(prev => [...prev, {
+                    role: 'ai',
+                    content: "I'm having trouble connecting right now, but I'm here simply to say: your feelings are valid.",
+                    timestamp: new Date()
+                }]);
+            }
         } finally {
             setIsTyping(false);
         }
@@ -155,6 +167,7 @@ export default function AITherapyChatPage() {
                                 <p>✓ Your conversation is private and anonymous</p>
                                 <p>✓ Available 24/7 for immediate support</p>
                                 <p>✓ No judgement, just listening</p>
+                                <p>✓ Daily limit of {settings.chat_message_limit} messages</p>
                             </div>
 
                             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-900">
@@ -226,10 +239,11 @@ export default function AITherapyChatPage() {
                                         value={input}
                                         onChange={(e) => setInput(e.target.value)}
                                         onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                                        placeholder="Type your message..."
-                                        className="flex-1 px-4 py-2 rounded-xl border border-border focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                        placeholder={limitReached ? "Daily limit reached" : "Type your message..."}
+                                        disabled={limitReached}
+                                        className="flex-1 px-4 py-2 rounded-xl border border-border focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-gray-50 disabled:cursor-not-allowed"
                                     />
-                                    <Button onClick={handleSendMessage} disabled={!input.trim()}>
+                                    <Button onClick={handleSendMessage} disabled={!input.trim() || limitReached}>
                                         <Send size={20} />
                                     </Button>
                                 </div>

@@ -27,6 +27,12 @@ interface StaffProfile {
     is_staff_verified: boolean;
     phone?: string;
     created_at: string;
+    doctor_data?: {
+        is_specialist: boolean;
+        specialty_type: string | null;
+        specialist_price_chat: number | null;
+        specialist_price_video: number | null;
+    } | null;
 }
 
 export default function AdminStaffPage() {
@@ -35,6 +41,8 @@ export default function AdminStaffPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [roleFilter, setRoleFilter] = useState('all');
     const [processingId, setProcessingId] = useState<string | null>(null);
+    const [globalSettings, setGlobalSettings] = useState<any>(null);
+    const [isUpdatingGlobal, setIsUpdatingGlobal] = useState(false);
 
     // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -50,14 +58,22 @@ export default function AdminStaffPage() {
         setLoading(true);
         try {
             const staffRoles = ['nurse', 'nurse-assistant', 'doctor', 'mental-health'];
+            // Since doctors is a 1:1 relation, we can fetch it alongside profiles
             const { data, error } = await supabase
                 .from('profiles')
-                .select('*')
+                .select('*, doctors(is_specialist, specialty_type, specialist_price_chat, specialist_price_video)')
                 .in('role', staffRoles)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            setStaff(data || []);
+
+            // Map the joined data to our StaffProfile interface
+            const formattedData = (data || []).map((prof: any) => ({
+                ...prof,
+                doctor_data: prof.doctors ? prof.doctors[0] || prof.doctors : null
+            }));
+
+            setStaff(formattedData);
         } catch (err: any) {
             console.error('Error fetching staff:', err);
         } finally {
@@ -65,8 +81,14 @@ export default function AdminStaffPage() {
         }
     };
 
+    const fetchSettings = async () => {
+        const { data } = await supabase.from('platform_settings').select('*').single();
+        if (data) setGlobalSettings(data);
+    };
+
     useEffect(() => {
         fetchStaff();
+        fetchSettings();
     }, []);
 
     const toggleVerification = async (staffMember: StaffProfile) => {
@@ -88,8 +110,86 @@ export default function AdminStaffPage() {
         } catch (err: any) {
             console.error('Error toggling verification:', err);
             alert('Failed to update status. Please ensure you have run the database migration SQL.');
+            setProcessingId(null);
+        }
+    };
+
+    const handleUpdateSpecialty = async (staffId: string, isSpecialist: boolean, specialtyType: string | null) => {
+        setProcessingId(`specialty-${staffId}`);
+        try {
+            const currentItem = staff.find(s => s.id === staffId);
+            const { error: doctorError } = await supabase
+                .from('doctors')
+                .upsert({
+                    id: staffId,
+                    is_specialist: isSpecialist,
+                    specialty_type: isSpecialist ? specialtyType : null,
+                    specialist_price_chat: currentItem?.doctor_data?.specialist_price_chat ?? null,
+                    specialist_price_video: currentItem?.doctor_data?.specialist_price_video ?? null
+                });
+
+            if (doctorError) throw doctorError;
+
+            // Update local state
+            setStaff(prev => prev.map(s =>
+                s.id === staffId ? {
+                    ...s,
+                    doctor_data: {
+                        ...(s.doctor_data || { specialist_price_chat: null, specialist_price_video: null }),
+                        is_specialist: isSpecialist,
+                        specialty_type: specialtyType
+                    }
+                } : s
+            ));
+        } catch (err: any) {
+            console.error('Error updating specialty:', err);
+            alert('Failed to update specialist role.');
         } finally {
             setProcessingId(null);
+        }
+    };
+
+    const handleUpdatePricing = async (staffId: string, field: 'chat' | 'video', value: number) => {
+        setProcessingId(`price-${staffId}-${field}`);
+        try {
+            const column = field === 'chat' ? 'specialist_price_chat' : 'specialist_price_video';
+            const { error } = await supabase
+                .from('doctors')
+                .update({ [column]: value })
+                .eq('id', staffId);
+
+            if (error) throw error;
+
+            setStaff(prev => prev.map(s =>
+                s.id === staffId ? {
+                    ...s,
+                    doctor_data: {
+                        ...s.doctor_data!,
+                        [column]: value
+                    }
+                } : s
+            ));
+        } catch (err: any) {
+            console.error('Error updating price:', err);
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    const handleUpdateGlobalSettings = async (field: string, value: number) => {
+        setIsUpdatingGlobal(true);
+        try {
+            const { error } = await supabase
+                .from('platform_settings')
+                .update({ [field]: value })
+                .eq('id', globalSettings.id);
+
+            if (error) throw error;
+            setGlobalSettings((prev: any) => ({ ...prev, [field]: value }));
+        } catch (err: any) {
+            console.error('Global update error:', err);
+        } finally {
+            setIsUpdatingGlobal(false);
         }
     };
 
@@ -99,7 +199,7 @@ export default function AdminStaffPage() {
 
         try {
             const defaultPassword = 'MedLudStaff123!'; // Default password for new staff
-            const { data, error } = await supabase.rpc('create_staff_user', {
+            const { data, error } = await (supabase.rpc as any)('create_staff_user', {
                 staff_email: formData.email,
                 staff_password: defaultPassword,
                 staff_full_name: formData.full_name,
@@ -208,20 +308,21 @@ export default function AdminStaffPage() {
                                 <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Professional</th>
                                 <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Role</th>
                                 <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Verification Status</th>
-                                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Action</th>
+                                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest">Specialist Config</th>
+                                <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-widest text-right">Action Status</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={4} className="px-6 py-12 text-center text-gray-400">
+                                    <td colSpan={5} className="px-6 py-12 text-center text-gray-400">
                                         <Loader2 className="animate-spin mx-auto mb-2" size={32} />
                                         <p>Loading staff records...</p>
                                     </td>
                                 </tr>
                             ) : filteredStaff.length === 0 ? (
                                 <tr>
-                                    <td colSpan={4} className="px-6 py-12 text-center text-gray-400">
+                                    <td colSpan={5} className="px-6 py-12 text-center text-gray-400">
                                         <p>No staff members found matching your criteria</p>
                                     </td>
                                 </tr>
@@ -255,6 +356,60 @@ export default function AdminStaffPage() {
                                                 </div>
                                             )}
                                         </td>
+                                        <td className="px-6 py-4">
+                                            {s.role === 'doctor' && s.is_staff_verified ? (
+                                                <div className="space-y-2 min-w-[180px]">
+                                                    <select
+                                                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all text-sm font-medium"
+                                                        value={s.doctor_data?.is_specialist ? (s.doctor_data.specialty_type || 'none') : 'none'}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            if (val === 'none') {
+                                                                handleUpdateSpecialty(s.id, false, null);
+                                                            } else {
+                                                                handleUpdateSpecialty(s.id, true, val);
+                                                            }
+                                                        }}
+                                                        disabled={processingId?.startsWith('specialty')}
+                                                    >
+                                                        <option value="none">General Pool</option>
+                                                        <option value="cardiology">Cardiology</option>
+                                                        <option value="neurology">Neurology</option>
+                                                        <option value="pediatrics">Pediatrics</option>
+                                                        <option value="orthopedics">Orthopedics</option>
+                                                        <option value="ophthalmology">Ophthalmology</option>
+                                                        <option value="psychiatry">Psychiatry</option>
+                                                    </select>
+
+                                                    {s.doctor_data?.is_specialist && (
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <div>
+                                                                <label className="text-[10px] text-gray-400 font-bold uppercase ml-1">Chat Price</label>
+                                                                <input
+                                                                    type="number"
+                                                                    className="w-full px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs"
+                                                                    placeholder="NGN"
+                                                                    value={s.doctor_data.specialist_price_chat || ''}
+                                                                    onChange={(e) => handleUpdatePricing(s.id, 'chat', parseInt(e.target.value))}
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="text-[10px] text-gray-400 font-bold uppercase ml-1">Video Price</label>
+                                                                <input
+                                                                    type="number"
+                                                                    className="w-full px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs"
+                                                                    placeholder="NGN"
+                                                                    value={s.doctor_data.specialist_price_video || ''}
+                                                                    onChange={(e) => handleUpdatePricing(s.id, 'video', parseInt(e.target.value))}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <span className="text-gray-400 text-xs">-</span>
+                                            )}
+                                        </td>
                                         <td className="px-6 py-4 text-right">
                                             <Button
                                                 variant={s.is_staff_verified ? "outline" : "primary"}
@@ -282,12 +437,47 @@ export default function AdminStaffPage() {
                 </div>
             </div>
 
-            {/* Hint for Admin */}
-            <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl flex gap-3 text-blue-700">
-                <ShieldCheck size={20} className="shrink-0" />
-                <p className="text-sm">
-                    <strong>Admin Tip:</strong> Activating a staff member will grant them instant access to the professional portal on their dashboard. Please ensure credentials have been verified.
-                </p>
+            {/* Hint for Admin & Global Pricing */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="p-5 bg-blue-50 border border-blue-100 rounded-2xl flex gap-3 text-blue-700 h-full">
+                    <ShieldCheck size={20} className="shrink-0" />
+                    <div className="space-y-1">
+                        <p className="text-sm font-bold">Admin Authority</p>
+                        <p className="text-xs">
+                            Activating a staff member grants portal access. For specialists, you can set individual rates override global defaults. Leave blank to use global prices.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="p-5 bg-emerald-50 border border-emerald-100 rounded-2xl flex flex-col gap-3 text-emerald-800">
+                    <div className="flex items-center gap-2 mb-1">
+                        <ShieldCheck size={20} className="text-emerald-600" />
+                        <span className="text-sm font-bold">Global Specialist Pricing (Default)</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-[10px] font-bold text-emerald-600 uppercase">Default Chat Price</label>
+                            <input
+                                type="number"
+                                className="w-full bg-white border border-emerald-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                                value={globalSettings?.specialist_chat_price || 0}
+                                onChange={(e) => handleUpdateGlobalSettings('specialist_chat_price', parseInt(e.target.value))}
+                                disabled={isUpdatingGlobal}
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold text-emerald-600 uppercase">Default Video Price</label>
+                            <input
+                                type="number"
+                                className="w-full bg-white border border-emerald-200 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                                value={globalSettings?.specialist_video_price || 0}
+                                onChange={(e) => handleUpdateGlobalSettings('specialist_video_price', parseInt(e.target.value))}
+                                disabled={isUpdatingGlobal}
+                            />
+                        </div>
+                    </div>
+                    <p className="text-[10px] text-emerald-600/60 italic">* Changes affect all specialties unless an individual doctor override is set.</p>
+                </div>
             </div>
 
             {/* Add Staff Modal */}

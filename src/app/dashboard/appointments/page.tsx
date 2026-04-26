@@ -61,6 +61,9 @@ export default function AppointmentsPage() {
                 .order('created_at', { ascending: false });
 
             if (supabaseError) {
+                if (supabaseError.message?.includes('signal is aborted')) {
+                    return;
+                }
                 console.error('Supabase error fetching appointments:', supabaseError);
                 throw supabaseError;
             }
@@ -68,6 +71,13 @@ export default function AppointmentsPage() {
             console.log(`Fetched ${data?.length || 0} appointments`);
             setAppointments(data || []);
         } catch (err: any) {
+            if (err.name === 'AbortError' || err.message?.includes('signal is aborted')) {
+                return;
+            }
+            if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
+                console.warn('Network error loading appointments — please check your connection.');
+                return;
+            }
             console.error('Error fetching appointments:', err);
             setError(err.message || 'Failed to retrieve appointments. Please try again later.');
         } finally {
@@ -79,9 +89,22 @@ export default function AppointmentsPage() {
         fetchAppointments();
     }, []);
 
-    const filteredCases = filter === 'ALL'
+    const rawFiltered = (filter === 'ALL'
         ? appointments
-        : appointments.filter(c => c.status === filter);
+        : appointments.filter(c => c.status === filter)
+    ).filter(c => c.status !== 'PAYMENT_PENDING');
+
+    // Smart deduplication: Only hide if Title AND Symptoms are exact matches for a PENDING case
+    const filteredCases = rawFiltered.filter((apt, index) => {
+        if (apt.status !== 'PENDING') return true;
+        
+        const firstIndex = rawFiltered.findIndex(a => 
+            a.status === 'PENDING' && 
+            a.title === apt.title && 
+            a.symptoms === apt.symptoms
+        );
+        return index === firstIndex;
+    });
 
     return (
         <div className="min-h-screen bg-background pb-20 animate-in fade-in duration-500">

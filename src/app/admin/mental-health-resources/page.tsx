@@ -9,7 +9,7 @@ interface CopingTechnique {
     id?: string;
     name: string;
     description: string;
-    steps: string[];
+    steps: any; // fixed json array type from supabase
     duration: string;
     category: string;
 }
@@ -79,13 +79,13 @@ export default function MentalHealthResourcesAdminPage() {
             if (editingItem) {
                 // Update
                 result = await supabase
-                    .from(table)
+                    .from(table as any)
                     .update({ ...dataToSave, updated_at: new Date().toISOString() })
                     .eq('id', editingItem.id);
             } else {
                 // Create
                 result = await supabase
-                    .from(table)
+                    .from(table as any)
                     .insert([dataToSave]);
             }
 
@@ -111,7 +111,7 @@ export default function MentalHealthResourcesAdminPage() {
             else table = 'self_care_tips';
 
             const { error } = await supabase
-                .from(table)
+                .from(table as any)
                 .delete()
                 .eq('id', id);
 

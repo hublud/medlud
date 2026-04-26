@@ -15,7 +15,7 @@ export interface AdminNotification {
 export interface SystemActivity {
     id: string;
     activity_type: 'login' | 'appointment' | 'user_action' | 'system';
-    user_id: string | null;
+    user_id: string;
     description: string;
     metadata: any;
     created_at: string;
@@ -50,7 +50,7 @@ export async function getUnreadNotifications(): Promise<AdminNotification[]> {
         return [];
     }
 
-    return data || [];
+    return (data || []) as any as AdminNotification[];
 }
 
 /**
@@ -68,7 +68,7 @@ export async function getAllNotifications(limit: number = 100): Promise<AdminNot
         return [];
     }
 
-    return data || [];
+    return (data || []) as any as AdminNotification[];
 }
 
 /**
@@ -132,7 +132,7 @@ export async function createNotification(
  */
 export async function getSystemActivity(limit: number = 50): Promise<SystemActivity[]> {
     const { data, error } = await supabase
-        .from('system_activity')
+        .from('system_activity' as any)
         .select(`
             *,
             user:profiles(full_name, email)
@@ -141,11 +141,11 @@ export async function getSystemActivity(limit: number = 50): Promise<SystemActiv
         .limit(limit);
 
     if (error) {
-        console.error('Error fetching system activity:', error);
+        console.error('Error fetching system activity:', (error as any)?.message || error, JSON.stringify(error, Object.getOwnPropertyNames(error || {})));
         return [];
     }
 
-    return data || [];
+    return (data || []) as any as SystemActivity[];
 }
 
 /**
@@ -157,7 +157,7 @@ export async function logSystemActivity(
     userId?: string,
     metadata?: any
 ): Promise<void> {
-    const { error } = await supabase
+    const { error } = await (supabase as any)
         .from('system_activity')
         .insert({
             activity_type: activityType,
@@ -179,8 +179,8 @@ export async function getSystemHealthMetrics(): Promise<{
     api: SystemHealthMetric[];
     storage: SystemHealthMetric[];
 }> {
-    const { data, error } = await supabase
-        .from('system_health_metrics')
+    const { data, error } = await (supabase as any)
+        .from('system_health_metrics' as any)
         .select('*')
         .order('created_at', { ascending: false })
         .limit(100);
@@ -190,12 +190,12 @@ export async function getSystemHealthMetrics(): Promise<{
         return { database: [], api: [], storage: [] };
     }
 
-    const metrics = data || [];
+    const metrics = (data || []) as any[];
 
     return {
-        database: metrics.filter(m => m.metric_type === 'database'),
-        api: metrics.filter(m => m.metric_type === 'api'),
-        storage: metrics.filter(m => m.metric_type === 'storage')
+        database: metrics.filter((m: any) => m.metric_type === 'database') as SystemHealthMetric[],
+        api: metrics.filter((m: any) => m.metric_type === 'api') as SystemHealthMetric[],
+        storage: metrics.filter((m: any) => m.metric_type === 'storage') as SystemHealthMetric[]
     };
 }
 
@@ -208,7 +208,7 @@ export async function recordHealthMetric(
     metricValue: number,
     status: SystemHealthMetric['status'] = 'healthy'
 ): Promise<void> {
-    const { error } = await supabase
+    const { error } = await (supabase as any)
         .from('system_health_metrics')
         .insert({
             metric_type: metricType,
@@ -295,7 +295,7 @@ export async function getUserNotifications(userId: string): Promise<UserNotifica
         return [];
     }
 
-    return data || [];
+    return (data || []) as any as UserNotification[];
 }
 
 /**

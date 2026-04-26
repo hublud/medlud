@@ -5,27 +5,12 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Calendar as CalendarIcon, List, Filter } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { Appointment } from '@/types/appointment';
 import { AppointmentCalendar } from '@/components/admin/AppointmentCalendar';
 import { BulkActionsBar } from '@/components/admin/BulkActionsBar';
 import { AppointmentDetailModal } from '@/components/admin/AppointmentDetailModal';
 
-interface Appointment {
-    id: string;
-    title: string;
-    symptoms: string;
-    status: string;
-    category: string;
-    created_at: string;
-    staff_id: string | null;
-    user?: {
-        full_name: string;
-        email: string;
-    };
-    staff?: {
-        full_name: string;
-        email: string;
-    };
-}
+
 
 export default function AdminAppointmentsPage() {
     const router = useRouter();
@@ -56,19 +41,59 @@ export default function AdminAppointmentsPage() {
     const loadAppointments = async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
+            // Step 1: Fetch appointments and staff profiles
+            // We omit user:profiles!user_id here because the relationship is missing/broken in some environments
+            const { data: aptData, error: aptError } = await supabase
                 .from('appointments')
                 .select(`
                     *,
-                    user:profiles!user_id(full_name, email),
                     staff:profiles!staff_id(full_name, email)
                 `)
                 .order('created_at', { ascending: false });
 
-            if (error) throw error;
-            setAppointments(data || []);
-        } catch (error) {
-            console.error('Error loading appointments:', error);
+            if (aptError) {
+                console.error('Supabase error fetching appointments:', aptError);
+                throw aptError;
+            }
+
+            if (!aptData || aptData.length === 0) {
+                setAppointments([]);
+                return;
+            }
+
+            // Step 2: Fetch user profiles separately
+            const userIds = [...new Set(aptData.map((apt: any) => apt.user_id).filter(Boolean))];
+
+            let userProfiles: Record<string, any> = {};
+            if (userIds.length > 0) {
+                const { data: profilesData, error: profilesError } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, email')
+                    .in('id', userIds);
+
+                if (profilesError) {
+                    console.error('Error fetching user profiles during admin load:', profilesError);
+                } else {
+                    profilesData?.forEach(p => {
+                        userProfiles[p.id] = p;
+                    });
+                }
+            }
+
+            // Step 3: Map data together
+            const mappedData: Appointment[] = aptData.map((apt: any) => ({
+                ...apt,
+                user: userProfiles[apt.user_id] || null,
+                staff: Array.isArray(apt.staff) ? apt.staff[0] : apt.staff
+            }));
+
+            setAppointments(mappedData);
+        } catch (error: any) {
+            console.error('Error loading appointments (catch):', error);
+            // Ensure error is not log-suppressed by generic {} stringification
+            if (typeof error === 'object' && error !== null) {
+                console.error('Detailed error keys:', Object.keys(error));
+            }
         } finally {
             setLoading(false);
         }
@@ -94,7 +119,8 @@ export default function AdminAppointmentsPage() {
         );
     };
 
-    const getCategoryColor = (category: string) => {
+    const getCategoryColor = (category: string | null | undefined) => {
+        if (!category) return 'bg-gray-100 text-gray-700';
         switch (category) {
             case 'mental-health': return 'bg-purple-100 text-purple-700';
             case 'maternal': return 'bg-pink-100 text-pink-700';
@@ -102,7 +128,8 @@ export default function AdminAppointmentsPage() {
         }
     };
 
-    const getStatusColor = (status: string) => {
+    const getStatusColor = (status: string | null | undefined) => {
+        if (!status) return 'bg-gray-100 text-gray-700';
         switch (status) {
             case 'APPROVED': return 'bg-green-100 text-green-700';
             case 'COMPLETED': return 'bg-blue-100 text-blue-700';
@@ -137,8 +164,8 @@ export default function AdminAppointmentsPage() {
                         <button
                             onClick={() => setView('calendar')}
                             className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${view === 'calendar'
-                                    ? 'bg-primary text-white'
-                                    : 'bg-white text-text-secondary border border-border hover:border-primary'
+                                ? 'bg-primary text-white'
+                                : 'bg-white text-text-secondary border border-border hover:border-primary'
                                 }`}
                         >
                             <CalendarIcon size={18} />
@@ -147,8 +174,8 @@ export default function AdminAppointmentsPage() {
                         <button
                             onClick={() => setView('list')}
                             className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${view === 'list'
-                                    ? 'bg-primary text-white'
-                                    : 'bg-white text-text-secondary border border-border hover:border-primary'
+                                ? 'bg-primary text-white'
+                                : 'bg-white text-text-secondary border border-border hover:border-primary'
                                 }`}
                         >
                             <List size={18} />
@@ -249,7 +276,7 @@ export default function AdminAppointmentsPage() {
                                             <td className="px-6 py-4 text-text-primary">{apt.title}</td>
                                             <td className="px-6 py-4">
                                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor(apt.category)}`}>
-                                                    {apt.category.replace('-', ' ').toUpperCase()}
+                                                    {apt.category ? apt.category.replace('-', ' ').toUpperCase() : 'GENERAL'}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4">
@@ -261,7 +288,7 @@ export default function AdminAppointmentsPage() {
                                                 {apt.staff?.full_name || 'Unassigned'}
                                             </td>
                                             <td className="px-6 py-4 text-text-secondary text-sm">
-                                                {new Date(apt.created_at).toLocaleDateString()}
+                                                {apt.created_at ? new Date(apt.created_at).toLocaleDateString() : 'N/A'}
                                             </td>
                                         </tr>
                                     ))}

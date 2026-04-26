@@ -5,64 +5,71 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { Calendar, User, Info, ArrowLeft } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { BLOOD_GROUPS } from '@/lib/constants';
+import { TagInput } from '@/components/ui/TagInput';
 
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 export default function HealthProfilePage() {
     const router = useRouter();
-    const { updateProfile } = useAuth();
+    const { user } = useAuth();
     const [loading, setLoading] = useState(false);
     const [gender, setGender] = useState('');
     const [dateOfBirth, setDateOfBirth] = useState('');
     const [pregnancyStatus, setPregnancyStatus] = useState('');
     const [bloodGroup, setBloodGroup] = useState('');
-    const [conditions, setConditions] = useState('');
-    const [allergies, setAllergies] = useState('');
-
+    const [conditions, setConditions] = useState<string[]>([]);
+    const [allergies, setAllergies] = useState<string[]>([]);
     const [error, setError] = useState<string | null>(null);
-
-    const handleSkip = () => {
-        router.push('/emergency-contact');
-    };
 
     const handleContinue = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError(null);
 
-        try {
-            const updates = {
-                gender,
-                date_of_birth: dateOfBirth || null,
-                is_pregnant: gender === 'female' ? (pregnancyStatus === 'yes') : false,
-                blood_group: bloodGroup,
-                known_conditions: conditions,
-                allergies: allergies,
-                onboarding_step: 'emergency-contact'
-            };
-
-            const { error: updateError } = await updateProfile(updates);
-
-            if (!updateError) {
-                router.push('/emergency-contact');
-            } else {
-                setError(updateError.message || 'Failed to update profile. Please ensure you have run the database fix script.');
-            }
-        } catch (err: any) {
-            console.error('Update error:', err);
-            setError('An unexpected error occurred. Please try again or skip this step.');
-        } finally {
+        const userId = user?.id;
+        if (!userId) {
+            setError('You are not logged in. Please refresh the page and try again.');
             setLoading(false);
+            return;
         }
+
+        const updates = {
+            gender: gender || null,
+            date_of_birth: dateOfBirth || null,
+            is_pregnant: gender === 'female' ? pregnancyStatus === 'yes' : false,
+            blood_group: bloodGroup || null,
+            known_conditions: conditions.join(', ') || null,
+            allergies: allergies.join(', ') || null,
+            onboarding_step: 'emergency-contact',
+            updated_at: new Date().toISOString(),
+        };
+
+        console.log('[HealthProfile] Saving profile for user:', userId);
+
+        const { error: dbError } = await supabase
+            .from('profiles')
+            .update(updates)
+            .eq('id', userId);
+
+        if (dbError) {
+            console.error('[HealthProfile] DB error:', dbError);
+            setError(dbError.message || 'Failed to save. Please try again.');
+            setLoading(false);
+            return;
+        }
+
+        console.log('[HealthProfile] Saved successfully, navigating...');
+        router.push('/emergency-contact');
     };
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-500">
-            <div className="text-center">
+            <div className="text-center mt-2">
                 <h1 className="text-2xl font-bold text-text-primary">Your Health Profile</h1>
-                <p className="text-text-secondary mt-1">Help us tailor your experience. You can skip this.</p>
+                <p className="text-text-secondary mt-1">Help us tailor your experience.</p>
             </div>
 
             {error && (
@@ -115,35 +122,25 @@ export default function HealthProfilePage() {
                     onChange={(e) => setBloodGroup(e.target.value)}
                 />
 
-                <Input
+                <TagInput
                     label="Known Conditions (Optional)"
-                    placeholder="e.g. Diabetes, Hypertension"
-                    leftIcon={Info}
-                    value={conditions}
-                    onChange={(e) => setConditions(e.target.value)}
+                    placeholder="E.g. Diabetes, Hypertension"
+                    tags={conditions}
+                    onChange={setConditions}
+                    helperText="Select or type and press enter to add"
                 />
 
-                <Input
+                <TagInput
                     label="Allergies (Optional)"
-                    placeholder="e.g. Peanuts, Penicillin"
-                    leftIcon={Info}
-                    value={allergies}
-                    onChange={(e) => setAllergies(e.target.value)}
+                    placeholder="E.g. Peanuts, Penicillin"
+                    tags={allergies}
+                    onChange={setAllergies}
+                    helperText="Select or type and press enter to add"
                 />
 
-                <div className="pt-4 flex flex-col space-y-3">
+                <div className="pt-4">
                     <Button type="submit" fullWidth size="lg" isLoading={loading}>
                         Continue
-                    </Button>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        fullWidth
-                        onClick={handleSkip}
-                        disabled={loading}
-                        className="text-text-secondary hover:text-text-primary"
-                    >
-                        Skip for now
                     </Button>
                 </div>
             </form>

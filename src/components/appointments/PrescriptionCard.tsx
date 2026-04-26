@@ -51,7 +51,7 @@ export const PrescriptionCard: React.FC<PrescriptionCardProps> = ({ id, doctorNa
                             <h3 className="font-bold text-primary text-sm uppercase tracking-wide">E-Prescription</h3>
                         </div>
                         <p className="text-sm font-semibold text-gray-900">Dr. {doctorName}</p>
-                        <p className="text-xs text-gray-500">{new Date(date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                        <p className="text-xs text-gray-500">{new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
                         <p className="font-mono text-[10px] text-gray-400 mt-1">RX ID: #{id ? id.slice(0, 8).toUpperCase() : 'PENDING'}</p>
                     </div>
                 </div>

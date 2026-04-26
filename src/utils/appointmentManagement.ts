@@ -72,7 +72,7 @@ export async function getAppointmentHistory(appointmentId: string): Promise<Appo
         return [];
     }
 
-    return data || [];
+    return (data || []) as any;
 }
 
 /**
@@ -110,7 +110,7 @@ export async function reassignAppointment(
 
     // Notify Patient
     await notifyPatientOfAppointmentEvent(appointmentId, 'REASSIGNED', {
-        doctorName: staff?.full_name
+        doctorName: staff?.full_name || undefined
     });
 }
 

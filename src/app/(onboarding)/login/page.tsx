@@ -11,7 +11,7 @@ import { useAuth } from '@/context/AuthContext';
 
 export default function LoginPage() {
     const router = useRouter();
-    const { signInWithGoogle, signIn } = useAuth();
+    const { signIn } = useAuth();
     const [loading, setLoading] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -31,13 +31,14 @@ export default function LoginPage() {
 
         try {
             console.log('Attempting sign in...');
-            const { error: signInError } = await signIn(email, password);
+            const { profile: userProfile, error: signInError } = await signIn(email, password);
 
             if (signInError) {
-                console.error('Sign in error:', signInError);
+                console.warn('Sign in error:', signInError.message);
                 // Handle abort error gracefully (common in dev/hot-reload)
-                if (signInError.name === 'AbortError' || signInError.message.includes('aborted')) {
-                    // Ignore aborts, likely navigation or cleanup
+                if (signInError.name === 'AbortError' || signInError.message?.includes('aborted')) {
+                    setLoading(false);
+                    isSubmitting.current = false;
                     return;
                 }
                 setError(signInError.message);
@@ -46,13 +47,24 @@ export default function LoginPage() {
                 return;
             }
 
-            console.log('Sign in successful, redirecting...');
+            console.log('Sign in successful, determining redirection path...');
+            const role = userProfile?.role || 'patient';
+            let targetPath = '/dashboard';
+
+            if (role === 'admin') {
+                targetPath = '/admin';
+            } else if (['doctor', 'nurse', 'nurse-assistant', 'mental-health'].includes(role)) {
+                targetPath = '/dashboard/staff';
+            }
+
+            console.log(`Redirecting to: ${targetPath}`);
+
             startTransition(() => {
-                router.push('/dashboard');
+                router.push(targetPath);
                 // Keep loading true during redirect
             });
         } catch (err: any) {
-            console.error('Login exception:', err);
+            console.warn('Login exception:', err.message || err);
             if (err.name !== 'AbortError') {
                 setError('An unexpected error occurred. Please try again.');
                 setLoading(false);
@@ -61,16 +73,6 @@ export default function LoginPage() {
         }
     };
 
-    const handleGoogleSignIn = async () => {
-        setLoading(true);
-        try {
-            await signInWithGoogle();
-            router.push('/dashboard');
-        } catch (err: any) {
-            setError('Failed to sign in with Google.');
-            setLoading(false);
-        }
-    };
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
@@ -149,27 +151,6 @@ export default function LoginPage() {
                 </Button>
             </form>
 
-            <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-200"></div>
-                </div>
-                <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-white text-text-secondary">Or continue with</span>
-                </div>
-            </div>
-
-            <Button
-                type="button"
-                variant="outline"
-                fullWidth
-                size="lg"
-                onClick={handleGoogleSignIn}
-                isLoading={loading}
-                className="flex items-center justify-center gap-2"
-            >
-                <Image src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" width={18} height={18} />
-                Google
-            </Button>
 
             <div className="pt-4 text-center">
                 <p className="text-sm text-text-secondary">

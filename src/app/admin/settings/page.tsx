@@ -11,6 +11,7 @@ import {
     ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { TelemedicineSettings } from '@/components/admin/TelemedicineSettings';
 
 export default function AdminSettingsPage() {
     return (
@@ -21,6 +22,8 @@ export default function AdminSettingsPage() {
             </div>
 
             <div className="max-w-3xl space-y-6">
+                <TelemedicineSettings />
+
                 {/* General Settings */}
                 <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                     <div className="p-6 border-b border-gray-50">

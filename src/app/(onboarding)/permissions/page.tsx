@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
-import { MapPin, Bell, Mic, Camera } from 'lucide-react';
+import { MapPin, Bell, Mic, Camera, ArrowLeft } from 'lucide-react';
 
 const hardwarePermissions = [
     { icon: MapPin, title: 'Location', description: 'To find nearby care & for emergencies.' },
@@ -14,10 +14,11 @@ const hardwarePermissions = [
 ];
 
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 export default function PermissionsPage() {
     const router = useRouter();
-    const { updateProfile } = useAuth();
+    const { user } = useAuth();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [consents, setConsents] = useState({
@@ -37,33 +38,56 @@ export default function PermissionsPage() {
         setLoading(true);
         setError(null);
 
+        const userId = user?.id;
+        if (!userId) {
+            setError('You are not logged in. Please refresh the page.');
+            setLoading(false);
+            return;
+        }
+
         const updates = {
             onboarding_completed: true,
             onboarding_step: 'completed',
             terms_accepted: consents.terms,
             privacy_policy_accepted: consents.privacy,
             emergency_consent_accepted: consents.emergency,
-            ai_consent_accepted: consents.ai
+            ai_consent_accepted: consents.ai,
+            updated_at: new Date().toISOString(),
         };
 
-        try {
-            const { error: updateError } = await updateProfile(updates);
+        const { error: dbError } = await supabase
+            .from('profiles')
+            .update(updates)
+            .eq('id', userId);
 
-            if (!updateError) {
-                router.push('/completion');
-            } else {
-                setError(updateError.message || 'Failed to save permissions.');
-            }
-        } catch (err: any) {
-            console.error('Update error:', err);
-            setError('An unexpected error occurred.');
-        } finally {
+        if (dbError) {
+            console.error('[Permissions] DB error:', dbError);
+            setError(dbError.message || 'Failed to save. Please try again.');
             setLoading(false);
+            return;
         }
+
+        // Send welcome email in the background
+        if (user?.email) {
+            fetch('/api/notifications/welcome', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: user.email }),
+            }).catch(err => console.error('Failed to send welcome email:', err));
+        }
+
+        router.push('/completion');
     };
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-500">
+            <button 
+                onClick={() => router.push('/emergency-contact')}
+                className="flex items-center text-sm font-medium text-text-secondary hover:text-primary transition-colors group mb-2"
+            >
+                <ArrowLeft size={16} className="mr-2 group-hover:-translate-x-1 transition-transform" />
+                Back
+            </button>
             <div className="text-center">
                 <h1 className="text-2xl font-bold text-text-primary">Enable Permissions</h1>
                 <p className="text-text-secondary mt-1">To get the best experience on MedLud</p>
@@ -125,13 +149,6 @@ export default function PermissionsPage() {
                 >
                     Allow & Continue
                 </Button>
-                <button
-                    onClick={handleGrant} // Reuse handleGrant logic to save completion status
-                    className="w-full text-center text-sm text-text-secondary mt-4 hover:underline"
-                    disabled={loading}
-                >
-                    Not now
-                </button>
             </div>
         </div>
     );

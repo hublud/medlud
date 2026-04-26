@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Apple, Moon, Droplets, Sun, Heart, Activity, Smile, Coffee, Dumbbell, Utensils, Brain, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -17,6 +17,8 @@ const ICON_MAP: any = {
 
 export const HealthTips: React.FC = () => {
     const [tips, setTips] = useState<any[]>(DEFAULT_TIPS);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [isPaused, setIsPaused] = useState(false);
 
     useEffect(() => {
         const fetchTips = async () => {
@@ -33,10 +35,36 @@ export const HealthTips: React.FC = () => {
         fetchTips();
     }, []);
 
+    useEffect(() => {
+        if (isPaused || tips.length <= 1) return;
+
+        const interval = setInterval(() => {
+            if (scrollRef.current) {
+                const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+
+                // Calculate if we're near the end (account for minor sub-pixel differences)
+                const isAtEnd = scrollLeft + clientWidth >= scrollWidth - 10;
+
+                if (isAtEnd) {
+                    scrollRef.current.scrollTo({ left: 0, behavior: 'smooth' });
+                } else {
+                    scrollRef.current.scrollTo({ left: scrollLeft + clientWidth, behavior: 'smooth' });
+                }
+            }
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [isPaused, tips.length]);
+
     return (
         <div className="mt-8">
             <h3 className="font-bold text-lg text-text-primary mb-4 px-1">Health Tips for You</h3>
-            <div className="flex overflow-x-auto snap-x space-x-4 pb-4 no-scrollbar">
+            <div
+                ref={scrollRef}
+                onMouseEnter={() => setIsPaused(true)}
+                onMouseLeave={() => setIsPaused(false)}
+                className="flex overflow-x-auto snap-x space-x-4 pb-4 no-scrollbar scroll-smooth"
+            >
                 {tips.map((tip, idx) => {
                     const Icon = ICON_MAP[tip.icon_name] || Apple;
                     return (

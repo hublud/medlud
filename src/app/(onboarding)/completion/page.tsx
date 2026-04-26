@@ -20,7 +20,7 @@ export default function CompletionPage() {
             </p>
 
             <div className="pt-8 w-full">
-                <Button onClick={() => router.push('/dashboard')} fullWidth size="lg">
+                <Button onClick={() => { window.location.href = '/dashboard'; }} fullWidth size="lg">
                     Go to Dashboard
                 </Button>
             </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { User, Session } from '@supabase/supabase-js';
 
@@ -10,10 +10,12 @@ interface AuthContextType {
     session: Session | null;
     loading: boolean;
     signInWithGoogle: () => Promise<void>;
-    signIn: (email: string, password: string) => Promise<{ data: any, error: any }>;
-    signUp: (email: string, password: string, metadata?: any) => Promise<{ data: any, error: any }>;
+    signIn: (email: string, password: string) => Promise<{ data: any, profile: any, error: any }>;
+    signUp: (email: string, password: string, metadata?: any) => Promise<{ data: any, profile: any, error: any }>;
+    verifyEmailOtp: (email: string, token: string) => Promise<{ error: any }>;
     signOut: () => Promise<void>;
     updateProfile: (updates: any) => Promise<{ error: any }>;
+    resendVerificationEmail: (email: string) => Promise<{ error: any }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,144 +25,166 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [profile, setProfile] = useState<any>(null);
     const [session, setSession] = useState<Session | null>(null);
     const [loading, setLoading] = useState(true);
+    const fetchingProfile = useRef<string | null>(null);
+    const profileFetchedFor = useRef<string | null>(null);
 
-    const fetchProfile = async (userId: string, attempts = 3) => {
+    const fetchProfile = async (userId: string, attempts = 2): Promise<any> => {
         for (let i = 1; i <= attempts; i++) {
             try {
-                console.log(`[Auth] Fetching profile for: ${userId} (Attempt ${i}/${attempts})`);
+                console.log(`[Auth] Fetching profile (attempt ${i}/${attempts})`);
 
-                const fetchPromise = supabase
+                const { data, error } = await supabase
                     .from('profiles')
                     .select('*')
                     .eq('id', userId)
-                    .single();
+                    .maybeSingle();
 
-                const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
-                );
+                if (error) throw error;
 
-                const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
+                if (data) {
+                    setProfile(data);
+                    profileFetchedFor.current = userId;
+                    return data;
+                }
 
-                if (error) {
-                    if (error.code === 'PGRST116') {
-                        console.warn('[Auth] Profile missing - creating default profile');
-                        const { data: userData } = await supabase.auth.getUser();
-                        const newProfile = {
+                // If no profile found, create one
+                if (i === 1) { // Only attempt create on first try
+                    console.warn('[Auth] Profile not found — creating default');
+                    const { data: userData } = await supabase.auth.getUser();
+                    const { data: created, error: createErr } = await supabase
+                        .from('profiles')
+                        .insert({
                             id: userId,
                             email: userData.user?.email,
                             role: 'patient',
                             onboarding_completed: false,
                             updated_at: new Date().toISOString()
-                        };
+                        })
+                        .select()
+                        .maybeSingle();
 
-                        const { data: createdData, error: createError } = await supabase
-                            .from('profiles')
-                            .insert(newProfile)
-                            .select()
-                            .single();
-
-                        if (createError) {
-                            console.error('[Auth] Failed to create default profile:', createError);
-                            throw createError;
-                        }
-
-                        console.log('[Auth] Default profile created successfully');
-                        setProfile(createdData);
-                        return; // Success
+                    if (!createErr && created) {
+                        setProfile(created);
+                        profileFetchedFor.current = userId;
+                        return created;
                     }
-                    throw error;
                 }
 
-                if (data) {
-                    setProfile(data);
-                    return; // Success
-                }
-            } catch (err: any) {
-                const isAbort = err.name === 'AbortError' || err.message?.includes('aborted');
-                console.warn(`[Auth] Profile fetch attempt ${i} ${isAbort ? 'timed out' : 'failed'}:`, err.message || err);
-
+                // Fallback for last attempt
                 if (i === attempts) {
-                    console.error('[Auth] All profile fetch attempts failed');
-                } else {
-                    // Wait before retrying (exponential backoff: 1s, 2s)
-                    await new Promise(r => setTimeout(r, 1000 * i));
+                    const fallback = { id: userId, role: 'patient', onboarding_completed: false, _fallback: true };
+                    setProfile(fallback);
+                    return fallback;
                 }
+
+            } catch (err: any) {
+                console.warn(`[Auth] Profile fetch attempt ${i} failed: ${err.message}`);
+                if (i === attempts) {
+                    const fallback = { id: userId, role: 'patient', onboarding_completed: false, _fallback: true };
+                    setProfile(fallback);
+                    return fallback;
+                }
+                await new Promise(r => setTimeout(r, 500 * i)); // Faster backoff
             }
         }
     };
 
+
     useEffect(() => {
+        let authInitialized = false;
         let safetyTimer: NodeJS.Timeout | null = null;
 
         const startSafetyTimer = () => {
             if (safetyTimer) clearTimeout(safetyTimer);
             safetyTimer = setTimeout(() => {
-                setLoading(currentLoading => {
-                    if (currentLoading) {
-                        console.warn('[Auth] Safety timeout reached - forcing loading to false');
-                        return false;
-                    }
-                    return false;
-                });
+                if (!authInitialized) {
+                    console.warn('⚠️ [Auth] Safety timeout reached - forcing auth initialization');
+                    setLoading(false);
+                }
             }, 10000); // 10 second safety cap
         };
 
         const initAuth = async () => {
+            console.log('🔄 [Auth] Initializing authentication...');
             startSafetyTimer();
             try {
-                const { data: { session }, error } = await supabase.auth.getSession();
-                if (error) throw error;
+                // Get initial session directly
+                const { data: { session: initialSession }, error } = await supabase.auth.getSession();
 
-                setSession(session);
-                setUser(session?.user ?? null);
+                if (error) {
+                    console.error('❌ [Auth] Error in initial session load:', error);
+                    if (error.message.includes('Refresh Token Not Found') ||
+                        error.message.includes('invalid_refresh_token') ||
+                        error.message.includes('refresh_token_not_found')) {
+                        console.warn('🔄 [Auth] Stale session detected, clearing...');
+                        await signOut();
+                    }
+                } else {
+                    console.log('✅ [Auth] Initial session check complete:', initialSession ? 'Session found' : 'No session');
+                    setSession(initialSession);
+                    setUser(initialSession?.user ?? null);
 
-                if (session?.user) {
-                    await fetchProfile(session.user.id).catch(err => {
-                        console.warn('[Auth] Profile fetch failed during init:', err);
-                    });
+                    if (initialSession?.user) {
+                        if (fetchingProfile.current !== initialSession.user.id && profileFetchedFor.current !== initialSession.user.id) {
+                            fetchingProfile.current = initialSession.user.id;
+                            await fetchProfile(initialSession.user.id).catch(err => {
+                                console.warn('⚠️ [Auth] Initial profile fetch failed:', err);
+                            }).finally(() => {
+                                fetchingProfile.current = null;
+                            });
+                        }
+                    }
                 }
             } catch (err) {
-                console.error('[Auth] Error in initial session load:', err);
+                console.error('💥 [Auth] Fatal error in initAuth:', err);
             } finally {
+                // We don't necessarily set loading to false here, 
+                // we let onAuthStateChange handle the definitive signal if possible,
+                // but if we have a session or definitely don't, we can proceed.
+                authInitialized = true;
                 setLoading(false);
                 if (safetyTimer) clearTimeout(safetyTimer);
+                console.log('✨ [Auth] Initialization phase finished');
             }
         };
 
-        initAuth();
-
-        // Listen for changes on auth state (sign in, sign out, etc.)
+        // Listen for changes on auth state
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            console.log(`[Auth] Event: ${event}`);
+            console.log(`📡 [Auth] Event: ${event}`);
 
-            // Only trigger full-screen loading for major transitions
-            const shouldShowLoading = event === 'INITIAL_SESSION' || event === 'SIGNED_IN';
+            // Only update if initialization has happened or if it's a critical event
+            const isInitialEvent = event === 'INITIAL_SESSION';
+            const isSignEvent = event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED';
 
-            if (shouldShowLoading) {
-                setLoading(true);
-                startSafetyTimer();
-            }
-
-            try {
+            if (isSignEvent || isInitialEvent) {
+                console.log(`👤 [Auth] Updating session and checking profile for: ${session?.user?.email || 'Guest'}`);
                 setSession(session);
                 setUser(session?.user ?? null);
 
                 if (session?.user) {
-                    await fetchProfile(session.user.id).catch(err => {
-                        console.warn('[Auth] Profile fetch failed during auth change:', err);
-                    });
-                } else if (event === 'SIGNED_OUT') {
+                    // Prevent duplicate fetches for the same session update
+                    if (fetchingProfile.current !== session.user.id && profileFetchedFor.current !== session.user.id) {
+                        fetchingProfile.current = session.user.id;
+                        await fetchProfile(session.user.id).finally(() => {
+                            fetchingProfile.current = null;
+                        });
+                    }
+                } else {
                     setProfile(null);
+                    profileFetchedFor.current = null;
+                    fetchingProfile.current = null;
                 }
-            } catch (err) {
-                console.error('[Auth] Error in auth state change:', err);
-            } finally {
-                if (shouldShowLoading) {
+
+                // If this happens after we thought we were initialized, or as the initial event
+                if (!authInitialized || isInitialEvent) {
+                    authInitialized = true;
                     setLoading(false);
                     if (safetyTimer) clearTimeout(safetyTimer);
                 }
             }
         });
+
+        initAuth();
 
         return () => {
             subscription.unsubscribe();
@@ -184,12 +208,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
 
         if (data.session && data.user) {
-            setSession(data.session);
-            setUser(data.user);
-            await fetchProfile(data.user.id);
+            // We NO LONGER manually set session/user/profile here.
+            // supabase.auth.signInWithPassword triggers onAuthStateChange automatically.
+            return { data, profile: null, error };
         }
 
-        return { data, error };
+        return { data, profile: null, error };
     };
 
     const signUp = async (email: string, password: string, metadata?: any) => {
@@ -197,23 +221,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             email,
             password,
             options: {
-                data: metadata
+                data: metadata,
+                emailRedirectTo: `${window.location.origin}/auth/callback`
             }
         });
 
         if (data.session && data.user) {
-            setSession(data.session);
-            setUser(data.user);
-            await supabase.from('profiles').insert({
-                id: data.user.id,
-                email: data.user.email,
-                role: 'patient',
-                ...metadata
-            });
-            await fetchProfile(data.user.id);
+            // We NO LONGER manually set session/user/profile here.
+            // supabase.auth.signUp triggers onAuthStateChange automatically.
+            return { data, profile: null, error };
         }
 
-        return { data, error };
+        return { data, profile: null, error };
+    };
+
+    const verifyEmailOtp = async (email: string, token: string) => {
+        console.log(`[Auth] Verifying OTP for ${email} with token: ${token}`);
+        const response = await supabase.auth.verifyOtp({
+            email: email.trim(),
+            token: token.trim(),
+            type: 'email'
+        });
+        
+        console.log('[Auth] verifyOtp response:', response);
+
+        // onAuthStateChange handles the session and profile update
+        return { error: response.error };
     };
 
     const signOut = async () => {
@@ -249,28 +282,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
-                // 1. Get Session
-                const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
-                if (sessionError) throw sessionError;
-                const currentUser = currentSession?.user;
-                if (!currentUser) throw new Error('No active session. Please log in again.');
+                // 1. Get Session/User (Use React State first to bypass storage sync race conditions!)
+                let currentUserId = user?.id;
+                let currentUserEmail = user?.email;
+
+                if (!currentUserId) {
+                    const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
+                    if (sessionError) throw sessionError;
+                    currentUserId = currentSession?.user?.id;
+                    currentUserEmail = currentSession?.user?.email;
+                }
+
+                if (!currentUserId) throw new Error('No active session. Please log in again.');
 
                 if (attempt === 1) {
-                    console.log('✅ [updateProfile] User verified:', currentUser.id);
+                    console.log('✅ [updateProfile] User verified:', currentUserId);
                 }
 
                 // 2. Ensure profile row exists (Crucial fallback if trigger failed)
                 const { data: existingProfile } = await supabase
                     .from('profiles')
                     .select('id')
-                    .eq('id', currentUser.id)
+                    .eq('id', currentUserId)
                     .single();
 
                 if (!existingProfile) {
                     console.warn('⚠️ [updateProfile] Profile missing - creating fresh row');
                     await supabase.from('profiles').insert({
-                        id: currentUser.id,
-                        email: currentUser.email,
+                        id: currentUserId,
+                        email: currentUserEmail || '',
                         role: 'patient'
                     });
                 }
@@ -280,7 +320,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 const { error: updateError } = await supabase
                     .from('profiles')
                     .update({ ...updates, updated_at: new Date().toISOString() })
-                    .eq('id', currentUser.id);
+                    .eq('id', currentUserId);
 
                 if (updateError) {
                     // Normalize error message for checking
@@ -298,8 +338,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
                 console.log('✨ [updateProfile] SUCCESS in', Date.now() - startTime, 'ms');
 
-                // 4. Background Sync
-                fetchProfile(currentUser.id).catch(err => console.error('⚠️ [updateProfile] Background sync failed:', err));
+                // 4. Optimistic UI Update & Background Sync
+                setProfile((prev: any) => ({ ...prev, ...updates }));
+                fetchProfile(currentUserId).catch(err => console.error('⚠️ [updateProfile] Background sync failed:', err));
 
                 return { error: null };
             } catch (err: any) {
@@ -322,8 +363,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 return { error: err };
             }
         }
-
         return { error: lastError };
+    };
+
+    const resendVerificationEmail = async (email: string) => {
+        const { error } = await supabase.auth.resend({
+            type: 'signup',
+            email,
+            options: {
+                emailRedirectTo: `${window.location.origin}/auth/callback`
+            }
+        });
+        return { error };
     };
 
     const value = {
@@ -334,8 +385,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signInWithGoogle,
         signIn,
         signUp,
+        verifyEmailOtp,
         signOut,
-        updateProfile
+        updateProfile,
+        resendVerificationEmail
     };
 
     return (

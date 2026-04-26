@@ -16,7 +16,8 @@ import {
     Loader2,
     ArrowLeft,
     Activity,
-    XCircle
+    XCircle,
+    Tag
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -26,6 +27,9 @@ import { Appointment } from '@/types/appointment';
 import { IncomingCallModal } from '@/components/telemedicine/IncomingCallModal';
 import { LiveCallScreen } from '@/components/telemedicine/LiveCallScreen';
 import { PostCallReport } from '@/components/telemedicine/PostCallReport';
+import { DoctorWallet } from '@/components/telemedicine/DoctorWallet';
+import { notifyPatientOfClaimedCase } from '@/lib/notifications';
+import { DoctorPayments } from '@/components/telemedicine/DoctorPayments';
 import { useAgora } from '@/hooks/useAgora';
 
 export default function StaffPortalPage() {
@@ -33,7 +37,8 @@ export default function StaffPortalPage() {
     const [appointments, setAppointments] = useState<Appointment[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'URGENT' | 'MENTAL_HEALTH' | 'MATERNAL'>('ALL');
-    const [activeTab, setActiveTab] = useState<'QUEUE' | 'HISTORY'>('QUEUE');
+    const [activeTab, setActiveTab] = useState<'QUEUE' | 'HISTORY' | 'WALLET' | 'PAYMENTS' | 'POOL'>('QUEUE');
+    const [poolCases, setPoolCases] = useState<any[]>([]);
     const [callHistory, setCallHistory] = useState<any[]>([]);
     const [audioEnabled, setAudioEnabled] = useState(false);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -43,6 +48,8 @@ export default function StaffPortalPage() {
     const [pendingCalls, setPendingCalls] = useState<any[]>([]);
     const [activeCall, setActiveCall] = useState<any>(null);
     const [finishedCall, setFinishedCall] = useState<any>(null);
+    const [doctorProfile, setDoctorProfile] = useState<any>(null);
+    const [specialistRequests, setSpecialistRequests] = useState<any[]>([]);
     const callStartTime = useRef<number | null>(null);
     const notificationAudio = useRef<HTMLAudioElement | null>(null);
     const [appId, setAppId] = useState('');
@@ -77,7 +84,10 @@ export default function StaffPortalPage() {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-                console.log('Current Dashboard User:', { uid: user.id, role: profile?.role, profile });
+                const { data: doctor } = await supabase.from('doctors').select('*').eq('id', user.id).single();
+
+                setDoctorProfile({ ...profile, ...doctor });
+                console.log('Current Dashboard User:', { uid: user.id, role: profile?.role, doctor });
             }
         };
 
@@ -102,6 +112,7 @@ export default function StaffPortalPage() {
             await fetchAppointments();
             await fetchPendingCalls();
             await fetchCallHistory();
+            await fetchPoolCases();
         };
         initialFetch();
 
@@ -151,34 +162,106 @@ export default function StaffPortalPage() {
                 console.log('Telemedicine Realtime Status:', status);
             });
 
+        // Subscription for consultations (specialist requests)
+        const consultationChannel = supabase
+            .channel('consultations_change')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'consultations' }, (payload) => {
+                fetchPendingCalls();
+            })
+            .subscribe();
+
         return () => {
             clearInterval(heartbeat);
             supabase.removeChannel(aptChannel);
             supabase.removeChannel(callChannel);
+            supabase.removeChannel(consultationChannel);
         };
     }, []);
 
+    const fetchPoolCases = async () => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            // Optional: Get doctor specialization to filter by default maybe?
+            // For now, fetch all from the API we just created
+            const res = await fetch('/api/consultations/pool');
+            const data = await res.json();
+            if (data.success) {
+                setPoolCases(data.cases || []);
+            }
+        } catch (err) {
+            console.error('Error fetching pool cases:', err);
+        }
+    };
+
     const fetchPendingCalls = async () => {
         try {
-            console.log('Fetching pending calls...');
-            const { data, error } = await supabase
+            console.log('Fetching pending calls and specialist requests...');
+
+            // 1. Fetch Standard Telemedicine Calls (only from last 1 hour)
+            const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+            const { data: callData, error: callError } = await supabase
                 .from('telemedicine_calls')
                 .select('*')
                 .eq('status', 'pending')
+                .gte('created_at', oneHourAgo)
                 .order('created_at', { ascending: false });
 
-            if (error) {
-                console.error('Telemedicine Fetch Error:', error.message);
+            // 2. Fetch Specialist Consultations (if doctor is a specialist)
+            let specData: any[] = [];
+
+            // Re-fetch doctor profile if not set (race condition on mount)
+            let currentLocallyDoctor = doctorProfile;
+            if (!currentLocallyDoctor) {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    const { data: docData } = await supabase.from('doctors').select('*').eq('id', user.id).single();
+                    currentLocallyDoctor = docData;
+                }
+            }
+
+            if (currentLocallyDoctor?.is_specialist && currentLocallyDoctor?.specialty_type) {
+                const { data: specRequests, error: specError } = await supabase
+                    .from('consultations')
+                    .select('*, profiles(full_name, med_id)')
+                    .eq('status', 'pending')
+                    .eq('specialty_type', currentLocallyDoctor.specialty_type)
+                    .is('doctor_id', null)
+                    .gte('created_at', oneHourAgo)
+                    .order('created_at', { ascending: false });
+
+                if (!specError && specRequests) {
+                    specData = specRequests.map(r => ({
+                        ...r,
+                        is_specialist_request: true,
+                        patient: r.profiles
+                    }));
+                }
+            }
+
+            setSpecialistRequests(specData);
+
+            if (callError) {
+                if (callError.message?.includes('AbortError') || callError.message?.includes('signal is aborted')) {
+                    return;
+                }
+                if (callError.message?.includes('Failed to fetch') || callError.message?.includes('NetworkError') || callError.message?.includes('fetch')) {
+                    console.warn('Network error fetching pending calls — will retry on next poll:', callError.message);
+                    return;
+                }
+                console.error('Telemedicine Fetch Error:', callError.message);
                 return;
             }
 
-            if (!data || data.length === 0) {
+            if (!callData || callData.length === 0) {
                 setPendingCalls([]);
                 return;
             }
 
-            // Fetch patient profiles for these calls (same logic as appointments)
-            const patientIds = Array.from(new Set(data.map(c => c.patient_id).filter(Boolean)));
+            // Fetch patient profiles for these calls
+            const patientIds = Array.from(new Set(callData.map(c => c.patient_id).filter(Boolean)));
 
             if (patientIds.length > 0) {
                 const { data: profileData } = await supabase
@@ -191,7 +274,7 @@ export default function StaffPortalPage() {
                     return acc;
                 }, {} as Record<string, any>);
 
-                const callsWithPatients = data.map(call => ({
+                const callsWithPatients = callData.map(call => ({
                     ...call,
                     patient: profileMap[call.patient_id] || null
                 }));
@@ -199,7 +282,7 @@ export default function StaffPortalPage() {
                 setPendingCalls(callsWithPatients);
                 setLastUpdated(new Date());
             } else {
-                setPendingCalls(data);
+                setPendingCalls(callData);
                 setLastUpdated(new Date());
             }
         } catch (err) {
@@ -217,14 +300,17 @@ export default function StaffPortalPage() {
                 .limit(20);
 
             if (error) {
+                if (error.message?.includes('AbortError') || error.message?.includes('signal is aborted')) {
+                    return;
+                }
                 console.error('Error fetching call history:', error);
                 return;
             }
 
             if (data && data.length > 0) {
                 // Fetch profiles separately to avoid join issues
-                const patientIds = Array.from(new Set(data.map(c => c.patient_id)));
-                const providerIds = Array.from(new Set(data.filter(c => c.provider_id).map(c => c.provider_id)));
+                const patientIds = Array.from(new Set(data.map(c => c.patient_id).filter((id): id is string => id !== null)));
+                const providerIds = Array.from(new Set(data.map(c => c.provider_id).filter((id): id is string => id !== null)));
 
                 const { data: profiles } = await supabase
                     .from('profiles')
@@ -257,6 +343,26 @@ export default function StaffPortalPage() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
+            if (call.is_specialist_request) {
+                // SPECIALIST FLOW (Consultations table)
+                const { error: updateError } = await supabase
+                    .from('consultations')
+                    .update({
+                        status: 'active',
+                        doctor_id: user.id,
+                        started_at: new Date().toISOString()
+                    })
+                    .eq('id', call.id)
+                    .is('doctor_id', null);
+
+                if (updateError) throw updateError;
+
+                // Redirect directly to the session room
+                router.push(`/dashboard/telemedicine/session/${call.id}`);
+                return;
+            }
+
+            // STANDARD FLOW (Telemedicine_calls table)
             // 1. Update call status
             const { error: updateError } = await supabase
                 .from('telemedicine_calls')
@@ -314,12 +420,35 @@ export default function StaffPortalPage() {
         }
     };
 
-    const handleEndCall = async () => {
+    const handleEndCall = async (transcript?: string) => {
         const duration = callStartTime.current ? Math.floor((Date.now() - callStartTime.current) / 1000) : 0;
+
+        let ai_summary_prefilled = null;
+
+        if (transcript && transcript.trim().length > 0) {
+            try {
+                // Prefetch summary using the patient's exact same route
+                const res = await fetch('/api/ai/telemedicine-summary', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ transcript: transcript.trim() }),
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && data.data) {
+                        ai_summary_prefilled = data.data;
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to prefetch AI summary:', err);
+            }
+        }
 
         setFinishedCall({
             ...activeCall,
-            duration
+            duration,
+            ai_summary_prefilled
         });
 
         await agora.leave();
@@ -327,29 +456,22 @@ export default function StaffPortalPage() {
         callStartTime.current = null;
     };
 
-    const handleSubmitReport = async (notes: string) => {
+    const handleSubmitReport = async (report: any) => {
         if (!finishedCall) return;
 
         try {
-            // 1. Generate AI Summary
-            const response = await fetch('/api/telemedicine/summary', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    notes,
-                    callType: finishedCall.call_type
-                })
-            });
-            const { summary } = await response.json();
-
-            // 2. Update DB
+            // Update DB with the comprehensive report
             const { error } = await supabase
                 .from('telemedicine_calls')
                 .update({
                     status: 'completed',
                     duration: finishedCall.duration,
-                    provider_notes: notes,
-                    ai_summary: summary
+                    provider_notes: report.provider_notes,
+                    ai_summary: report.ai_summary,
+                    diagnosis_notes: report.diagnosis_notes,
+                    treatment_instructions: report.treatment_instructions,
+                    lab_test_required: report.lab_test_required,
+                    required_lab_tests: report.required_lab_tests
                 })
                 .eq('id', finishedCall.id);
 
@@ -396,6 +518,15 @@ export default function StaffPortalPage() {
                 .order('created_at', { ascending: false });
 
             if (aptError) {
+                // Ignore standard AbortErrors during unmounting
+                if (aptError.message?.includes('AbortError') || aptError.message?.includes('signal is aborted')) {
+                    return;
+                }
+                // Ignore transient network errors (e.g. brief connectivity loss on local dev)
+                if (aptError.message?.includes('Failed to fetch') || aptError.message?.includes('NetworkError') || aptError.message?.includes('fetch')) {
+                    console.warn('Network error fetching appointments — will retry on next poll:', aptError.message);
+                    return;
+                }
                 console.error('Error fetching appointments (apt):', JSON.stringify(aptError, null, 2));
                 return;
             }
@@ -406,7 +537,7 @@ export default function StaffPortalPage() {
             }
 
             // Fetch patient profiles for these appointments
-            const patientIds = Array.from(new Set(aptData.map(a => a.user_id).filter(Boolean)));
+            const patientIds = Array.from(new Set(aptData.map(a => a.user_id).filter((id): id is string => id !== null)));
 
             if (patientIds.length > 0) {
                 const { data: profileData, error: profileError } = await supabase
@@ -424,15 +555,17 @@ export default function StaffPortalPage() {
                     return acc;
                 }, {} as Record<string, any>);
 
-                const appointmentsWithPatients = aptData.map(apt => ({
-                    ...apt,
-                    patient: profileMap[apt.user_id] || null
-                }));
+                const appointmentsWithPatients = aptData
+                    .filter(apt => apt.status !== 'PAYMENT_PENDING')
+                    .map(apt => ({
+                        ...apt,
+                        patient: apt.user_id ? profileMap[apt.user_id] : null
+                    }));
 
                 setAppointments(appointmentsWithPatients as any);
                 setLastUpdated(new Date());
             } else {
-                setAppointments(aptData as any);
+                setAppointments(aptData.filter(apt => apt.status !== 'PAYMENT_PENDING') as any);
                 setLastUpdated(new Date());
             }
 
@@ -444,6 +577,9 @@ export default function StaffPortalPage() {
     };
 
     const filteredAppointments = appointments.filter(apt => {
+        // Double safety check - should already be filtered in fetchAppointments
+        if (apt.status === 'PAYMENT_PENDING') return false; 
+
         if (filter === 'ALL') return true;
         if (filter === 'PENDING') return apt.status === 'PENDING';
         if (filter === 'URGENT') return apt.priority === 'URGENT' || apt.priority === 'HIGH';
@@ -541,7 +677,8 @@ export default function StaffPortalPage() {
                             <p className="text-2xl font-bold text-gray-900">
                                 {appointments.filter(a => {
                                     try {
-                                        return new Date(a.date).toDateString() === new Date().toDateString();
+                                        const d = a.date || a.created_at;
+                                        return d ? new Date(d).toDateString() === new Date().toDateString() : false;
                                     } catch (e) {
                                         return false;
                                     }
@@ -590,6 +727,24 @@ export default function StaffPortalPage() {
                                     >
                                         History
                                     </button>
+                                    <button
+                                        onClick={() => setActiveTab('WALLET')}
+                                        className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'WALLET' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' : 'text-gray-500 hover:text-emerald-600'}`}
+                                    >
+                                        Wallet
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('PAYMENTS')}
+                                        className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'PAYMENTS' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' : 'text-gray-500 hover:text-emerald-600'}`}
+                                    >
+                                        Payments
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('POOL')}
+                                        className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'POOL' ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20' : 'text-gray-500 hover:text-amber-600'}`}
+                                    >
+                                        Case Pool
+                                    </button>
                                 </div>
                             </div>
 
@@ -630,9 +785,94 @@ export default function StaffPortalPage() {
                         </div>
 
                         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden min-h-[300px]">
-                            {loading && activeTab === 'QUEUE' ? (
+                            {activeTab === 'WALLET' ? (
+                                <DoctorWallet />
+                            ) : activeTab === 'PAYMENTS' ? (
+                                <DoctorPayments />
+                            ) : loading && activeTab === 'QUEUE' ? (
                                 <div className="flex items-center justify-center h-48">
                                     <Loader2 className="animate-spin text-primary" size={32} />
+                                </div>
+                            ) : activeTab === 'POOL' ? (
+                                <div className="divide-y divide-gray-100">
+                                    {poolCases.length === 0 ? (
+                                        <div className="p-12 text-center">
+                                            <Activity size={48} className="mx-auto text-gray-200 mb-4" />
+                                            <p className="text-gray-500 font-medium">The case pool is empty.</p>
+                                            <p className="text-sm text-gray-400 mt-1">Excellent! All patients have been attended to.</p>
+                                            <Button 
+                                                variant="outline" 
+                                                size="sm" 
+                                                className="mt-4"
+                                                onClick={fetchPoolCases}
+                                            >
+                                                Refresh Pool
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        poolCases.map((c) => (
+                                            <div key={c.id} className="p-5 hover:bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors">
+                                                <div className="flex items-start gap-4">
+                                                    <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center font-bold text-amber-600">
+                                                        {c.user?.full_name?.split(' ').map((n: any) => n[0]).join('') || 'P'}
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <h3 className="font-bold text-gray-900">{c.user?.full_name || 'Patient'}</h3>
+                                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-100 text-amber-700 border-amber-200">
+                                                                {c.consultation_type?.toUpperCase()}
+                                                            </span>
+                                                            {c.specialty_type && (
+                                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-blue-100 text-blue-700 border-blue-200">
+                                                                    {c.specialty_type}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-sm text-gray-600 mb-1">Requested a {c.consultation_type} session</p>
+                                                        <div className="flex items-center gap-3 text-xs text-gray-400">
+                                                            <span className="flex items-center gap-1"><Clock size={12} /> {new Date(c.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
+                                                            <span>•</span>
+                                                            <span className="text-emerald-600 font-bold">₦{c.price.toLocaleString()}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Button 
+                                                        size="sm" 
+                                                        className="bg-amber-600 hover:bg-amber-700 text-white px-6"
+                                                        onClick={async () => {
+                                                            try {
+                                                                const { data: { user } } = await supabase.auth.getUser();
+                                                                if (!user) return;
+
+                                                                const res = await fetch('/api/consultations/claim', {
+                                                                    method: 'POST',
+                                                                    headers: { 'Content-Type': 'application/json' },
+                                                                    body: JSON.stringify({
+                                                                        consultationId: c.id,
+                                                                        doctorId: user.id
+                                                                    })
+                                                                });
+
+                                                                const data = await res.json();
+                                                                if (data.success) {
+                                                                    // Redirect to the session room
+                                                                    router.push(`/dashboard/telemedicine/session/${c.id}`);
+                                                                } else {
+                                                                    alert(data.error || 'Failed to claim case');
+                                                                    fetchPoolCases();
+                                                                }
+                                                            } catch (err) {
+                                                                console.error('Claim error:', err);
+                                                            }
+                                                        }}
+                                                    >
+                                                        Claim Case
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
                                 </div>
                             ) : activeTab === 'HISTORY' ? (
                                 <div className="divide-y divide-gray-100">
@@ -642,25 +882,27 @@ export default function StaffPortalPage() {
                                         </div>
                                     ) : (
                                         callHistory.map((call) => (
-                                            <div key={call.id} className="p-4 hover:bg-gray-50 flex items-center justify-between transition-colors">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-xs">
-                                                        {call.patient?.full_name?.split(' ').map((n: string) => n[0]).join('') || 'P'}
-                                                    </div>
-                                                    <div>
-                                                        <h3 className="font-bold text-gray-900">{call.patient?.full_name || 'Patient'}</h3>
-                                                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                                                            <span className="flex items-center gap-1"><Clock size={12} /> {Math.floor(call.duration / 60)}m {call.duration % 60}s</span>
-                                                            <span className="text-gray-300">•</span>
-                                                            <span>{new Date(call.created_at).toLocaleDateString()}</span>
+                                            <Link href={`/dashboard/staff/telemedicine/${call.id}`} key={call.id}>
+                                                <div className="p-4 hover:bg-gray-50 flex items-center justify-between transition-colors">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-xs">
+                                                            {call.patient?.full_name?.split(' ').map((n: string) => n[0]).join('') || 'P'}
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="font-bold text-gray-900">{call.patient?.full_name || 'Patient'}</h3>
+                                                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                                <span className="flex items-center gap-1"><Clock size={12} /> {Math.floor(call.duration / 60)}m {call.duration % 60}s</span>
+                                                                <span className="text-gray-300">•</span>
+                                                                <span>{call.created_at ? new Date(call.created_at).toLocaleDateString('en-GB') : 'N/A'}</span>
+                                                            </div>
                                                         </div>
                                                     </div>
+                                                    <div className="text-right">
+                                                        <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest">{call.call_type}</p>
+                                                        <p className="text-[10px] text-gray-400">by {call.provider?.full_name || 'System'}</p>
+                                                    </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest">{call.call_type}</p>
-                                                    <p className="text-[10px] text-gray-400">by {call.provider?.full_name || 'System'}</p>
-                                                </div>
-                                            </div>
+                                            </Link>
                                         ))
                                     )}
                                 </div>
@@ -682,7 +924,7 @@ export default function StaffPortalPage() {
                                                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getPriorityColor(apt.priority || 'MEDIUM')}`}>
                                                             {apt.priority || 'MEDIUM'}
                                                         </span>
-                                                        {getCategoryBadge(apt.category)}
+                                                        {getCategoryBadge(apt.category || undefined)}
                                                     </div>
                                                     <p className="text-sm text-gray-600 font-medium mb-0.5">{apt.title}</p>
                                                     <p className="text-xs text-gray-400 truncate max-w-md">{apt.description || apt.symptoms}</p>
@@ -693,11 +935,11 @@ export default function StaffPortalPage() {
                                                 <div className="text-right hidden sm:block">
                                                     <p className="text-xs font-medium text-gray-500 flex items-center justify-end gap-1">
                                                         <Calendar size={12} />
-                                                        {new Date(apt.date).toLocaleDateString()}
+                                                        {new Date(apt.date || apt.created_at || '').toLocaleDateString('en-GB')}
                                                     </p>
                                                     <p className="text-xs text-gray-400 flex items-center justify-end gap-1">
                                                         <Clock size={12} />
-                                                        {new Date(apt.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        {new Date(apt.date || apt.created_at || '').toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
                                                     </p>
                                                 </div>
                                                 <div className="flex items-center gap-2">
@@ -725,6 +967,8 @@ export default function StaffPortalPage() {
                                                                 if (error) {
                                                                     alert('Failed to accept case. It may have already been claimed.');
                                                                 } else {
+                                                                    // Trigger notification (Server Action)
+                                                                    notifyPatientOfClaimedCase(apt.id);
                                                                     router.push(`/dashboard/staff/appointments/${apt.id}`);
                                                                 }
                                                             }}
@@ -757,7 +1001,7 @@ export default function StaffPortalPage() {
                                 </h3>
                                 <div className="flex items-center gap-2">
                                     <div className="text-[10px] text-gray-400 font-medium">
-                                        Last sync: {lastUpdated instanceof Date ? lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'N/A'}
+                                        Last sync: {lastUpdated ? lastUpdated.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'N/A'}
                                     </div>
                                     <button
                                         onClick={fetchPendingCalls}
@@ -776,19 +1020,42 @@ export default function StaffPortalPage() {
 
                             {pendingCalls.length === 0 ? (
                                 <div className="py-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                                    <Video size={24} className="mx-auto text-gray-300 mb-2 opacity-50" />
+                                    <Clock size={24} className="mx-auto text-gray-300 mb-2 opacity-50" />
                                     <p className="text-xs text-gray-400 font-medium">No incoming calls</p>
                                     <p className="text-[10px] text-gray-300">Queue is active and listening...</p>
                                 </div>
                             ) : (
                                 <div className="space-y-3">
+                                    {/* Specialist Requests First */}
+                                    {specialistRequests.map(req => (
+                                        <div key={req.id} className="bg-amber-50/50 p-3 rounded-xl border border-amber-100 flex items-center justify-between shadow-sm animate-in zoom-in duration-300">
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-0.5">
+                                                    <p className="text-sm font-bold text-gray-900">{req.patient?.full_name || 'Patient'}</p>
+                                                    <span className="text-[10px] bg-amber-200 text-amber-800 font-bold px-1.5 py-0.5 rounded uppercase">Specialist</span>
+                                                </div>
+                                                <p className="text-[10px] text-gray-500 flex items-center gap-1">
+                                                    <Tag size={10} /> {req.specialty_type} • {req.consultation_type}
+                                                </p>
+                                            </div>
+                                            <Button
+                                                size="sm"
+                                                className="bg-amber-600 hover:bg-amber-700 text-white h-8 px-3 text-xs"
+                                                onClick={() => handleAcceptCall(req)}
+                                            >
+                                                Accept
+                                            </Button>
+                                        </div>
+                                    ))}
+
+                                    {/* Standard Calls */}
                                     {pendingCalls.map(call => (
                                         <div key={call.id} className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-100 flex items-center justify-between shadow-sm animate-in slide-in-from-right-4 duration-300">
                                             <div>
                                                 <div className="flex items-center gap-2 mb-0.5">
                                                     <p className="text-sm font-bold text-gray-900">{call.patient?.full_name || 'Patient'}</p>
                                                     <span className="text-[10px] text-gray-400 font-medium">
-                                                        {new Date(call.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        {call.created_at ? new Date(call.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
                                                     </span>
                                                 </div>
                                                 <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">{call.call_type} • PENDING</p>
@@ -831,7 +1098,7 @@ export default function StaffPortalPage() {
                                                 Update on {apt.title}
                                             </p>
                                             <p className="text-xs text-gray-400">
-                                                {new Date(apt.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                {apt.created_at ? new Date(apt.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
                                             </p>
                                         </div>
                                     </div>
@@ -882,7 +1149,7 @@ export default function StaffPortalPage() {
                                 <Video className="text-primary" />
                                 Live Consultation
                             </h2>
-                            <Button variant="outline" className="text-white border-white/20 hover:bg-white/10" onClick={handleEndCall}>
+                            <Button variant="outline" className="text-white border-white/20 hover:bg-white/10" onClick={() => handleEndCall()}>
                                 Minimize
                             </Button>
                         </div>

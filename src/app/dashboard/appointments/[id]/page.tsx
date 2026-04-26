@@ -8,8 +8,8 @@ import { PrescriptionCard } from '@/components/appointments/PrescriptionCard';
 import Link from 'next/link';
 import { ChatMessage, Appointment, Prescription } from '@/types/appointment';
 import { ChatBubble } from '@/components/shared/ChatBubble';
-import { AISummaryCard } from '@/components/staff/AISummaryCard';
 import { supabase } from '@/lib/supabase';
+import { notifyNewResponse } from '@/lib/notifications';
 
 export default function AppointmentDetailsPage() {
     const params = useParams();
@@ -62,12 +62,24 @@ export default function AppointmentDetailsPage() {
         }
     }, [params.id]);
 
+    // Polling fallback
+    useEffect(() => {
+        if (!params.id) return;
+        
+        const interval = setInterval(() => {
+            fetchAppointmentDetails(params.id as string, true);
+        }, 30000); // Poll every 30 seconds
+
+        return () => clearInterval(interval);
+    }, [params.id]);
+
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
 
-    const fetchAppointmentDetails = async (id: string) => {
+    const fetchAppointmentDetails = async (id: string, isSilent = false) => {
         try {
+            if (!isSilent) setLoading(true);
             const { data: { user } } = await supabase.auth.getUser();
             userRef.current = user?.id || null;
 
@@ -100,7 +112,7 @@ export default function AppointmentDetailsPage() {
                     .maybeSingle();
 
                 if (docData) {
-                    appointmentWithDoctor.doctor = docData;
+                    (appointmentWithDoctor as any).doctor = docData as any;
                 }
                 if (docError) {
                     console.error('Doctor fetch error:', JSON.stringify(docError, null, 2));
@@ -117,7 +129,7 @@ export default function AppointmentDetailsPage() {
                 .order('created_at', { ascending: true });
 
             if (msgError) console.error('Messages error:', JSON.stringify(msgError, null, 2));
-            setMessages(msgData || []);
+            setMessages(msgData as any || []);
 
             // Fetch Prescriptions
             const { data: rxData, error: rxError } = await supabase
@@ -126,7 +138,7 @@ export default function AppointmentDetailsPage() {
                 .eq('appointment_id', id);
 
             if (rxError) console.error('Prescriptions error:', JSON.stringify(rxError, null, 2));
-            setPrescriptions(rxData || []);
+            setPrescriptions(rxData as any || []);
 
         } catch (error: any) {
             console.error('Error fetching appointment (catch):', JSON.stringify(error, null, 2));
@@ -169,6 +181,9 @@ export default function AppointmentDetailsPage() {
                 setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
                 throw error;
             }
+
+            // Trigger notification to doctor (Server Action)
+            notifyNewResponse(appointment.id, 'USER', textToSend || 'Sent an image');
 
         } catch (error) {
             console.error('Error sending reply:', error);
@@ -245,7 +260,7 @@ export default function AppointmentDetailsPage() {
 
     const getDoctorName = () => {
         if (appointment?.doctor) {
-            const doc = appointment.doctor;
+            const doc = appointment.doctor as any;
             if (doc.full_name) {
                 const name = doc.full_name;
                 // Add prefix based on role if not already present
@@ -310,7 +325,7 @@ export default function AppointmentDetailsPage() {
                                 CONNECTED
                             </span>
                         ) : (
-                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${getStatusColor(appointment.status)}`}>
+                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${getStatusColor(appointment.status || '')}`}>
                                 {appointment.status}
                             </span>
                         )}
@@ -358,7 +373,7 @@ export default function AppointmentDetailsPage() {
                                     </div>
                                     <div>
                                         <h2 className="font-bold text-gray-900 text-sm">Consultation Details</h2>
-                                        <p className="text-[10px] text-gray-500 uppercase tracking-tighter">Submitted on {new Date(appointment.date).toLocaleDateString()}</p>
+                                        <p className="text-[10px] text-gray-500 uppercase tracking-tighter">Submitted on {new Date(appointment.date || "").toLocaleDateString()}</p>
                                     </div>
                                 </div>
                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${appointment.severity === 'severe' ? 'bg-red-100 text-red-700' :
@@ -475,7 +490,7 @@ export default function AppointmentDetailsPage() {
                             <div>
                                 <h3 className="font-bold text-gray-900">{isWaiting ? 'Pending Assignment' : getDoctorName()}</h3>
                                 <p className="text-xs text-gray-500 font-medium">
-                                    {isWaiting ? 'Awaiting medical review' : (appointment.doctor?.role ? appointment.doctor.role.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Assigned Practitioner')}
+                                    {isWaiting ? 'Awaiting medical review' : ((appointment.doctor as any)?.role ? (appointment.doctor as any).role.replace('-', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) : 'Assigned Practitioner')}
                                 </p>
                             </div>
 
@@ -494,7 +509,7 @@ export default function AppointmentDetailsPage() {
                                 <PrescriptionCard
                                     id={prescriptions[0]?.id}
                                     doctorName={getDoctorName()}
-                                    date={prescriptions[0]?.created_at || appointment.date}
+                                    date={prescriptions[0]?.created_at || appointment.date || ''}
                                     items={prescriptions.map(p => ({
                                         medicine: p.medication,
                                         dosage: p.dosage,
@@ -505,12 +520,6 @@ export default function AppointmentDetailsPage() {
                             </div>
                         )}
 
-                        {/* AI Summary - Also visible to patient as requested */}
-                        <div className="animate-in slide-in-from-right-4 duration-500 delay-150">
-                            <AISummaryCard
-                                consultationText={`${appointment.description} ${messages.map(m => m.content).join(' ')}`}
-                            />
-                        </div>
 
                         {/* Consultation Note */}
                         {!isWaiting && appointment.doctor_response && (

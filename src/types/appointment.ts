@@ -21,42 +21,45 @@ export interface ChatMessage {
 
 export interface Appointment {
     id: string;
-    user_id: string; // Changed from patient_id to match BookingForm
-    doctor_id?: string;
-    title: string;
-    description: string; // Can be a computed view or just separate field
-    symptoms: string;
-    duration?: string; // Existing field from BookingForm
-    severity?: 'mild' | 'moderate' | 'severe'; // Existing field from BookingForm
-    medication_details?: string; // Existing field
-    date: string; // ISO date string
-    status: 'PENDING' | 'RESPONDED' | 'COMPLETED' | 'CANCELLED';
-    priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'; // New field we want to add
-    category?: 'general' | 'mental-health' | 'maternal'; // New field for categorization
-    ai_summary?: {
-        chiefComplaint: string;
-        keySymptoms: string[];
-        suggestedActions: string[];
-        riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
-    };
-    doctor_response?: string;
-    created_at: string;
+    user_id: string | null;
+    doctor_id?: string | null;
+    staff_id?: string | null;
+    title: string | null;
+    description: string | null;
+    symptoms: string | null;
+    duration?: string | null;
+    severity?: string | null;
+    medication_details?: string | null;
+    date: string | null;
+    status: string | null;
+    priority?: string | null;
+    category?: string | null;
+    ai_summary?: any;
+    doctor_response?: string | null;
+    created_at: string | null;
 
-    // Joined fields (optional, depend on query)
-    patient?: { // mapped from profiles via user_id
-        first_name: string;
-        last_name: string;
-        email?: string;
-        date_of_birth?: string;
-        blood_group?: string;
-        gender?: string;
-    };
+    // Joined fields
+    user?: {
+        full_name: string | null;
+        email: string | null;
+    } | null;
+    staff?: {
+        full_name: string | null;
+        email: string | null;
+    } | null;
+    patient?: {
+        full_name?: string | null;
+        first_name?: string | null;
+        last_name?: string | null;
+        email?: string | null;
+        med_id?: string | null;
+    } | null;
     doctor?: {
-        first_name?: string;
-        last_name?: string;
-        full_name?: string;
-        role?: string;
-    };
+        full_name?: string | null;
+        first_name?: string | null;
+        last_name?: string | null;
+        email?: string | null;
+    } | null;
     messages?: ChatMessage[];
     prescriptions?: Prescription[];
 }

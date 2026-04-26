@@ -25,28 +25,42 @@ export default function OnboardingLayout({
             return;
         }
 
-        // 2. If logged in but NOT finished, ensure they are on the right step
-        if (user && profile?.onboarding_completed === false) {
-            const currentStep = profile?.onboarding_step || 'health-profile';
-            const stepPaths = {
+        // 2. If NOT logged in and on a protected step page, send to login
+        const protectedStepPages = ['/health-profile', '/emergency-contact', '/permissions', '/completion'];
+        if (!user && !loading && protectedStepPages.includes(pathname)) {
+            console.log('[OnboardingLayout] Not logged in on protected page, redirecting to login');
+            router.push('/login');
+            return;
+        }
+
+        // 3. If logged in but NOT finished — only redirect from pre-auth landing pages
+        if (user && profile?.onboarding_completed !== true) {
+            let currentStep = profile?.onboarding_step || 'health-profile';
+            // Rescue users stuck on basic-info
+            if (currentStep === 'basic-info') {
+                currentStep = 'health-profile';
+            }
+
+            const stepPaths: Record<string, string> = {
+                'verify-email': '/verify-email',
                 'health-profile': '/health-profile',
                 'emergency-contact': '/emergency-contact',
                 'permissions': '/permissions',
                 'completed': '/completion'
             };
+            const targetPath = stepPaths[currentStep];
 
-            const targetPath = stepPaths[currentStep as keyof typeof stepPaths];
-
-            // Redirect if they land on generic pages (welcome, account-type, login) or wrong step
-            const landingPages = ['/welcome', '/account-type', '/login', '/signup'];
-            if (landingPages.includes(pathname) || (targetPath && pathname !== targetPath && pathname !== '/completion')) {
-                console.log(`[OnboardingLayout] Redirecting from ${pathname} to current step: ${targetPath}`);
+            // Only redirect away from PRE-AUTH pages — never interfere with active step pages
+            const preAuthPages = ['/welcome', '/account-type', '/login', '/signup', '/verify-email', '/basic-info'];
+            if (preAuthPages.includes(pathname)) {
+                console.log(`[OnboardingLayout] Redirecting from pre-auth page ${pathname} to step: ${targetPath}`);
                 if (targetPath) router.push(targetPath);
+                return;
             }
 
-            // Show welcome back toast
+            // Show welcome toast once on first load of a step page
             setShowWelcome(true);
-            const timer = setTimeout(() => setShowWelcome(false), 5000);
+            const timer = setTimeout(() => setShowWelcome(false), 4000);
             return () => clearTimeout(timer);
         }
     }, [user, profile, loading, pathname, router]);
@@ -117,7 +131,7 @@ export default function OnboardingLayout({
                     </div>
                 )}
 
-                <div className="bg-white p-8 rounded-2xl shadow-lg border border-border">
+                <div className="bg-white p-5 sm:p-8 rounded-2xl shadow-lg border border-border">
                     {children}
                 </div>
             </div>

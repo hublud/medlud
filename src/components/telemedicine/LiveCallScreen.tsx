@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button';
 
 interface LiveCallScreenProps {
     type: 'VIDEO' | 'VOICE';
-    onEndCall: () => void;
+    onEndCall: (transcript: string) => void;
     agora: any;
 }
 
@@ -12,6 +12,8 @@ export const LiveCallScreen: React.FC<LiveCallScreenProps> = ({ type, onEndCall,
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoEnabled, setIsVideoEnabled] = useState(type === 'VIDEO');
     const [duration, setDuration] = useState(0);
+    const [transcript, setTranscript] = useState('');
+    const recognitionRef = useRef<any>(null);
 
     const localVideoRef = useRef<HTMLDivElement>(null);
     const remoteVideoRef = useRef<HTMLDivElement>(null);
@@ -22,6 +24,35 @@ export const LiveCallScreen: React.FC<LiveCallScreenProps> = ({ type, onEndCall,
             setDuration(prev => prev + 1);
         }, 1000);
         return () => clearInterval(timer);
+    }, []);
+
+    // Speech Recognition
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+            if (SpeechRecognition) {
+                const recognition = new SpeechRecognition();
+                recognition.continuous = true;
+                recognition.interimResults = false;
+                recognition.lang = 'en-US';
+
+                recognition.onresult = (event: any) => {
+                    let currentTranscript = '';
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        currentTranscript += event.results[i][0].transcript + ' ';
+                    }
+                    setTranscript((prev) => prev + currentTranscript);
+                };
+
+                recognition.start();
+                recognitionRef.current = recognition;
+            }
+        }
+        return () => {
+            if (recognitionRef.current) {
+                try { recognitionRef.current.stop(); } catch (e) {}
+            }
+        };
     }, []);
 
     // Local Video Rendering
@@ -129,7 +160,7 @@ export const LiveCallScreen: React.FC<LiveCallScreenProps> = ({ type, onEndCall,
                     )}
 
                     <button
-                        onClick={onEndCall}
+                        onClick={() => onEndCall(transcript.trim())}
                         className="p-4 rounded-full bg-red-600 text-white hover:bg-red-700 transition-colors shadow-lg hover:shadow-red-900/20"
                         title="End Call"
                     >

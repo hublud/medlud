@@ -34,22 +34,57 @@ export default function TelemedicineLogsPage() {
     async function fetchLogs() {
         try {
             setLoading(true);
-            // Fetch calls with patient and provider profile details
-            const { data, error } = await supabase
+            // Step 1: Fetch calls without joins (which may fail due to missing relationships)
+            const { data: callsData, error: callsError } = await supabase
                 .from('telemedicine_calls')
-                .select(`
-          *,
-          patient:patient_id(full_name, med_id),
-          provider:provider_id(full_name),
-          ai_summary,
-          provider_notes
-        `)
+                .select('*')
                 .order('created_at', { ascending: false });
 
-            if (error) throw error;
-            setLogs(data || []);
-        } catch (error) {
-            console.error('Error fetching logs:', error);
+            if (callsError) {
+                console.error('Supabase error fetching calls:', callsError);
+                throw callsError;
+            }
+
+            if (!callsData || callsData.length === 0) {
+                setLogs([]);
+                return;
+            }
+
+            // Step 2: Extract unique profile IDs (patients and providers)
+            const profileIds = Array.from(new Set([
+                ...callsData.map(c => c.patient_id),
+                ...callsData.map(c => c.provider_id)
+            ].filter((id): id is string => !!id)));
+
+            let profilesMap: Record<string, any> = {};
+            if (profileIds.length > 0) {
+                const { data: profilesData, error: profilesError } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, med_id')
+                    .in('id', profileIds);
+
+                if (profilesError) {
+                    console.error('Error fetching profiles for logs:', profilesError);
+                } else {
+                    profilesData?.forEach(p => {
+                        profilesMap[p.id] = p;
+                    });
+                }
+            }
+
+            // Step 3: Map profiles back into call data
+            const mappedData = callsData.map(call => ({
+                ...call,
+                patient: call.patient_id ? profilesMap[call.patient_id] : null,
+                provider: call.provider_id ? profilesMap[call.provider_id] : null
+            }));
+
+            setLogs(mappedData);
+        } catch (error: any) {
+            console.error('Error fetching logs (catch):', error);
+            if (typeof error === 'object' && error !== null) {
+                console.error('Detailed error keys:', Object.keys(error));
+            }
         } finally {
             setLoading(false);
         }

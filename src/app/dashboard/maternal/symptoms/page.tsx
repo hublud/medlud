@@ -2,8 +2,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Send, AlertTriangle, CheckCircle, Stethoscope, Phone } from 'lucide-react';
+import { ArrowLeft, Send, AlertTriangle, CheckCircle, Stethoscope, Phone, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { useAuth } from '@/context/AuthContext';
+import { aiService } from '@/services/aiService';
 import { assessMaternalSymptoms } from '@/utils/maternalRiskAssessment';
 import { MaternalSymptomResult } from '@/types/user';
 
@@ -27,6 +29,10 @@ export default function MaternalSymptomCheckerPage() {
     const [isTyping, setIsTyping] = useState(false);
     const [result, setResult] = useState<MaternalSymptomResult | null>(null);
     const [gestationalAge, setGestationalAge] = useState(20);
+    const [messageCountToday, setMessageCountToday] = useState(0);
+    const [dailyLimit] = useState(25);
+    const [isLimitReached, setIsLimitReached] = useState(false);
+    const { user } = useAuth();
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -36,7 +42,24 @@ export default function MaternalSymptomCheckerPage() {
             const profile = JSON.parse(profileData);
             setGestationalAge(profile.gestationalAge);
         }
-    }, []);
+
+        const fetchUsage = async () => {
+            if (!user) return;
+            try {
+                const history = await aiService.getChatHistory(user.id);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const count = history.filter(m =>
+                    m.role === 'user' && new Date(m.created_at) >= today
+                ).length;
+                setMessageCountToday(count);
+                if (count >= dailyLimit) setIsLimitReached(true);
+            } catch (err) {
+                console.error('Failed to fetch usage:', err);
+            }
+        };
+        fetchUsage();
+    }, [user, dailyLimit]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -58,16 +81,31 @@ export default function MaternalSymptomCheckerPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     messages: updatedMessages.filter(m => m.role !== 'system'),
-                    gestationalAge
+                    gestationalAge,
+                    userId: user?.id
                 })
             });
 
-            if (!response.ok) throw new Error('Failed to get response');
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.details || errorData.error || 'Failed to get response');
+            }
 
             const data = await response.json();
-            const aiMessage: Message = { role: 'assistant', content: data.reply };
+            const aiMessage: Message = {
+                role: 'assistant',
+                content: data.reply,
+                isSerious: data.isSerious
+            } as any;
 
             setMessages(prev => [...prev, aiMessage]);
+
+            // Update local count
+            setMessageCountToday(prev => {
+                const newCount = prev + 1;
+                if (newCount >= dailyLimit) setIsLimitReached(true);
+                return newCount;
+            });
 
             // Analyze all symptoms for the result card
             // We still use local assessment for the risk card to maintain UI consistency and safety triggers
@@ -138,10 +176,17 @@ export default function MaternalSymptomCheckerPage() {
                     </Link>
                 </div>
 
-                {/* Header */}
-                <div className="space-y-2">
-                    <h1 className="text-2xl font-bold text-text-primary">Maternal Symptom Checker</h1>
-                    <p className="text-text-secondary">Pregnancy-aware symptom assessment</p>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="space-y-2">
+                        <h1 className="text-2xl font-bold text-text-primary">Maternal Symptom Checker</h1>
+                        <p className="text-text-secondary">Pregnancy-aware symptom assessment</p>
+                    </div>
+                    {user && (
+                        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border shadow-sm self-start ${isLimitReached ? 'bg-red-50 border-red-100 text-red-600' : 'bg-primary/5 border-primary/10 text-primary'}`}>
+                            <Bot size={16} />
+                            <span className="text-xs font-bold whitespace-nowrap">{messageCountToday}/{dailyLimit} messages today</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Chat Interface */}
@@ -152,15 +197,29 @@ export default function MaternalSymptomCheckerPage() {
                                 key={index}
                                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                             >
-                                <div
-                                    className={`max-w-[80%] rounded-2xl px-4 py-3 ${message.role === 'user'
-                                        ? 'bg-primary text-white'
-                                        : message.role === 'system'
-                                            ? 'bg-red-50 border border-red-200 text-red-900'
-                                            : 'bg-gray-100 text-text-primary'
-                                        }`}
-                                >
-                                    <p className="text-sm whitespace-pre-line">{message.content}</p>
+                                <div className="space-y-2">
+                                    <div
+                                        className={`max-w-[85%] rounded-2xl px-5 py-3 shadow-sm ${message.role === 'user'
+                                            ? 'bg-primary text-white ml-auto'
+                                            : message.role === 'system'
+                                                ? 'bg-red-50 border border-red-200 text-red-900'
+                                                : 'bg-white border border-border text-text-primary'
+                                            }`}
+                                    >
+                                        <p className="text-sm whitespace-pre-line leading-relaxed">{message.content}</p>
+                                    </div>
+                                    {message.role === 'assistant' && (message as any).isSerious && (
+                                        <div className="max-w-[85%] mt-2">
+                                            <Link href="/dashboard/appointments/book?category=maternal">
+                                                <Button
+                                                    className="w-full bg-red-600 hover:bg-red-700 text-white border-none shadow-lg shadow-red-200 py-3 rounded-xl flex items-center justify-center gap-2 font-black transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                                                >
+                                                    Consult a Specialist Now
+                                                    <Send size={14} className="rotate-45" />
+                                                </Button>
+                                            </Link>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -187,8 +246,9 @@ export default function MaternalSymptomCheckerPage() {
                                     value={input}
                                     onChange={(e) => setInput(e.target.value)}
                                     onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                                    placeholder="Describe your symptoms..."
-                                    className="flex-1 px-4 py-2 rounded-xl border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+                                    placeholder={isLimitReached ? "Daily limit reached" : "Describe your symptoms..."}
+                                    disabled={isLimitReached}
+                                    className={`flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all ${isLimitReached ? 'bg-gray-50 opacity-60 cursor-not-allowed' : ''}`}
                                 />
                                 <Button onClick={handleSendMessage} disabled={!input.trim()}>
                                     <Send size={20} />

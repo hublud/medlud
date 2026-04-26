@@ -17,7 +17,7 @@ async function diagnose() {
                 console.log('Columns found:', Object.keys(data[0]));
             } else {
                 console.log('Table is empty. Attempting to check columns via rpc or error induction...');
-                const { error: insertErr } = await supabase.from('messages').insert({ image_url: 'test' });
+                const { error: insertErr } = await supabase.from('messages').insert({ image_url: 'test' } as any);
                 if (insertErr && insertErr.message.includes('column "image_url" of relation "messages" does not exist')) {
                     console.log('❌ Column "image_url" is MISSING.');
                 } else {

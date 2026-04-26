@@ -38,13 +38,12 @@ export const AISummaryCard: React.FC<AISummaryCardProps> = ({ consultationText, 
                     setAnalysis(result);
                 }
             } catch (error) {
-                console.error("Analysis failed", error);
                 if (isMounted) {
                     setAnalysis({
-                        chiefComplaint: 'Analysis Failed',
+                        chiefComplaint: 'Analysis Unavailable',
                         detectedSymptoms: [],
                         riskLevel: 'LOW',
-                        suggestedActions: ['Consultation text could not be analyzed']
+                        suggestedActions: [(error as Error).message || 'Service temporarily unavailable']
                     });
                 }
             } finally {
@@ -90,7 +89,7 @@ export const AISummaryCard: React.FC<AISummaryCardProps> = ({ consultationText, 
                     <div className="bg-indigo-50 p-1.5 rounded-lg border border-indigo-100">
                         <Sparkles className="text-indigo-600" size={16} />
                     </div>
-                    AI Insights
+                    Medlud AI insight
                 </h3>
                 <div className={`
                     text-[10px] font-black px-2.5 py-1 rounded-lg border shadow-sm
@@ -129,7 +128,7 @@ export const AISummaryCard: React.FC<AISummaryCardProps> = ({ consultationText, 
                 <div className="bg-white rounded-2xl p-4 border border-indigo-50 shadow-inner">
                     <label className="text-[10px] font-black text-indigo-900 uppercase tracking-widest mb-3 block flex items-center gap-2">
                         <Activity size={14} className="text-indigo-600" />
-                        AI Agent Advice
+                        Medlud AI Advice
                     </label>
                     <ul className="space-y-2.5">
                         {analysis.suggestedActions.map((action, idx) => (
@@ -145,7 +144,7 @@ export const AISummaryCard: React.FC<AISummaryCardProps> = ({ consultationText, 
             <div className="mt-5 pt-3 border-t border-indigo-50 flex items-center justify-center gap-1.5">
                 <Sparkles size={10} className="text-indigo-300" />
                 <p className="text-[9px] font-bold text-indigo-300 uppercase tracking-widest">
-                    Agent-level monitoring active
+                    Medlud AI monitoring active
                 </p>
             </div>
         </div>

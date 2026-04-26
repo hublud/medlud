@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { openai } from '@/lib/openai';
+import { supabaseAdmin } from '@/lib/supabase';
 
 const MATERNAL_SYSTEM_PROMPT = `
 You are a compassionate Maternal Health Assistant for MedLud, an AI-powered healthcare platform in Nigeria. 
@@ -24,30 +25,60 @@ IMPORTANT GUIDELINES:
 7. If the symptoms seem normal for the stage of pregnancy, reassure them but advise monitoring.
 
 STRUCTURE YOUR RESPONSE:
-- Acknowledge the symptom.
-- Ask critical safety questions if necessary.
-- Provide a preliminary assessment.
-- Give clear recommendations (ANC visit, rest, hydration, or IMMEDIATE HOSPITAL if danger signs).
+You must respond in JSON format with two fields:
+1. "reply": Your helpful response to the user.
+2. "isSerious": A boolean indicating if any of the danger signs mentioned above are detected or if the situation warrants an immediate specialist consultation.
 `;
 
 export async function POST(req: Request) {
     try {
         if (!process.env.OPENAI_API_KEY) {
             return NextResponse.json({
-                error: 'OpenAI API key is not configured',
-                details: 'Please add OPENAI_API_KEY to your .env.local file'
+                error: 'OpenAI API key is not configured'
             }, { status: 500 });
         }
 
-        const { messages, gestationalAge } = await req.json();
+        const { messages, gestationalAge, userId } = await req.json();
 
         if (!messages || !Array.isArray(messages)) {
             return NextResponse.json({ error: 'Messages array is required' }, { status: 400 });
         }
 
+        // 1. Check Usage Limit if userId is provided
+        if (userId) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            // Fetch limit from platform settings
+            const { data: settings } = await supabaseAdmin
+                .from('platform_settings')
+                .select('chat_message_limit')
+                .limit(1)
+                .single();
+
+            const limit = settings?.chat_message_limit || 25;
+
+            // Count user's messages today
+            const { count, error: countError } = await supabaseAdmin
+                .from('ai_chat_messages')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', userId)
+                .eq('role', 'user')
+                .gte('created_at', today.toISOString());
+
+            if (count !== null && count >= limit) {
+                return NextResponse.json({
+                    error: 'Daily message limit reached',
+                    details: `You have reached your limit of ${limit} messages today. Please try again tomorrow.`
+                }, { status: 429 });
+            }
+        }
+
         const contextPrompt = gestationalAge
             ? `${MATERNAL_SYSTEM_PROMPT}\n\nUser Context: The user is currently ${gestationalAge} weeks pregnant.`
             : MATERNAL_SYSTEM_PROMPT;
+
+        const lastUserMessage = messages[messages.length - 1]?.content;
 
         const completion = await openai.chat.completions.create({
             model: 'gpt-4o',
@@ -55,12 +86,32 @@ export async function POST(req: Request) {
                 { role: 'system', content: contextPrompt },
                 ...messages
             ],
+            response_format: { type: "json_object" },
             temperature: 0.7,
         });
 
-        const reply = completion.choices[0].message.content;
+        const replyContent = completion.choices[0].message.content || '{}';
+        const parsedReply = JSON.parse(replyContent);
 
-        return NextResponse.json({ reply });
+        // 2. Persist to database if userId is provided
+        if (userId) {
+            await supabaseAdmin.from('ai_chat_messages').insert([
+                {
+                    user_id: userId,
+                    role: 'user',
+                    content: lastUserMessage,
+                    is_serious: false
+                },
+                {
+                    user_id: userId,
+                    role: 'assistant',
+                    content: parsedReply.reply,
+                    is_serious: parsedReply.isSerious
+                }
+            ]);
+        }
+
+        return NextResponse.json(parsedReply);
     } catch (error: any) {
         console.error('Maternal AI Error:', error);
         return NextResponse.json({

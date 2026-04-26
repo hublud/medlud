@@ -10,6 +10,7 @@ export interface AppointmentCase {
     symptoms: string;
     doctorName?: string;
     doctor?: { full_name: string };
+    created_at?: string;
 }
 
 interface AppointmentCardProps {
@@ -35,7 +36,7 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({ data }) => {
                     </span>
                     <span className="text-xs text-text-secondary flex items-center">
                         <Calendar size={12} className="mr-1" />
-                        {new Date(data.date).toLocaleDateString()}
+                        {new Date(data.date || data.created_at || Date.now()).toLocaleDateString('en-GB')}
                     </span>
                 </div>
 

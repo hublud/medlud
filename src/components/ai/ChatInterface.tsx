@@ -1,28 +1,29 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Paperclip, Bot, User, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
+import { Send, Paperclip, Bot, User, Loader2, AlertTriangle } from 'lucide-react';
 import { aiService } from '@/services/aiService';
+import { useAuth } from '@/context/AuthContext';
+import Link from 'next/link';
+import { Button } from '@/components/ui/Button';
 
 interface Message {
     id: string;
     role: 'USER' | 'AI';
     content: string;
     timestamp: Date;
+    isSerious?: boolean;
 }
 
 export const ChatInterface: React.FC = () => {
-    const [messages, setMessages] = useState<Message[]>([
-        {
-            id: '1',
-            role: 'AI',
-            content: "Hello! I'm your MedLud AI Health Assistant. I can help you check symptoms, understand medical terms, or provide general wellness advice. How can I help you today?",
-            timestamp: new Date()
-        }
-    ]);
+    const { user } = useAuth();
+    const [messages, setMessages] = useState<Message[]>([]);
     const [inputValue, setInputValue] = useState('');
     const [isTyping, setIsTyping] = useState(false);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+    const [messageCountToday, setMessageCountToday] = useState(0);
+    const [dailyLimit, setDailyLimit] = useState(25);
+    const [isLimitReached, setIsLimitReached] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -36,12 +37,57 @@ export const ChatInterface: React.FC = () => {
 
     // Cleanup timeout on unmount
     useEffect(() => {
+        const loadHistory = async () => {
+            if (!user) return;
+            setIsLoadingHistory(true);
+            try {
+                // 1. Fetch History
+                const history = await aiService.getChatHistory(user.id);
+                if (history.length > 0) {
+                    setMessages(history.map(m => ({
+                        id: m.id,
+                        role: m.role === 'user' ? 'USER' : 'AI',
+                        content: m.content,
+                        isSerious: m.is_serious,
+                        timestamp: new Date(m.created_at)
+                    })));
+
+                    // 2. Calculate today's message count
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const userMessagesToday = history.filter(m =>
+                        m.role === 'user' && new Date(m.created_at) >= today
+                    ).length;
+
+                    setMessageCountToday(userMessagesToday);
+                    if (userMessagesToday >= dailyLimit) {
+                        setIsLimitReached(true);
+                    }
+                } else {
+                    setMessages([
+                        {
+                            id: 'welcome',
+                            role: 'AI',
+                            content: "Hello! I'm your MedLud AI Health Assistant. I can help you check symptoms, understand medical terms, or provide general wellness advice. How can I help you today?",
+                            timestamp: new Date()
+                        }
+                    ]);
+                }
+            } catch (err) {
+                console.error('Failed to load history:', err);
+            } finally {
+                setIsLoadingHistory(false);
+            }
+        };
+
+        loadHistory();
+
         return () => {
             if (timeoutRef.current) {
                 clearTimeout(timeoutRef.current);
             }
         };
-    }, []);
+    }, [user]);
 
 
     const handleSendMessage = async (e?: React.FormEvent) => {
@@ -70,21 +116,31 @@ export const ChatInterface: React.FC = () => {
             }));
 
 
-            const response = await aiService.sendMessage(apiMessages, "You are MedLud AI, a helpful health assistant. You are not a doctor. Always advise users to seek professional medical advice for serious conditions.");
+            const response = await aiService.sendMessageStructured(
+                apiMessages,
+                user?.id || '',
+                "You are MedLud AI, a helpful health assistant. You are not a doctor. Always advise users to seek professional medical advice for serious conditions."
+            );
 
             const aiResponse: Message = {
                 id: (Date.now() + 1).toString(),
                 role: 'AI',
-                content: response,
+                content: response.reply,
+                isSerious: response.isSerious,
                 timestamp: new Date()
             };
             setMessages(prev => [...prev, aiResponse]);
-        } catch (error) {
+            setMessageCountToday(prev => {
+                const newCount = prev + 1;
+                if (newCount >= dailyLimit) setIsLimitReached(true);
+                return newCount;
+            });
+        } catch (error: any) {
             console.error('Failed to get AI response:', error);
             const errorResponse: Message = {
                 id: (Date.now() + 1).toString(),
                 role: 'AI',
-                content: "I'm sorry, I'm having trouble connecting to the server. Please try again later.",
+                content: error.message || "I'm sorry, I'm having trouble connecting to the server. Please try again later.",
                 timestamp: new Date()
             };
             setMessages(prev => [...prev, errorResponse]);
@@ -102,11 +158,18 @@ export const ChatInterface: React.FC = () => {
                     <Bot size={24} className="text-primary" />
                 </div>
                 <div>
-                    <h2 className="font-bold text-text-primary">MedLud Assistant</h2>
-                    <p className="text-xs text-green-600 flex items-center gap-1">
-                        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                        Online
-                    </p>
+                    <h2 className="font-bold text-text-primary text-sm sm:text-base">MedLud Assistant</h2>
+                    <div className="flex items-center gap-3">
+                        <p className="text-[10px] sm:text-xs text-green-600 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                            Online
+                        </p>
+                        {user && (
+                            <p className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${isLimitReached ? 'bg-red-100 text-red-600' : 'bg-primary/10 text-primary'}`}>
+                                {messageCountToday}/{dailyLimit} messages today
+                            </p>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -125,13 +188,46 @@ export const ChatInterface: React.FC = () => {
                         </div>
 
                         <div className={`
-                            max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm
+                            max-w-[85%] rounded-2xl px-5 py-3.5 text-sm leading-relaxed shadow-md
                             ${msg.role === 'USER'
                                 ? 'bg-blue-600 text-white rounded-tr-none'
-                                : 'bg-white text-text-primary border border-border rounded-tl-none'}
+                                : 'bg-white text-text-primary border border-blue-50 rounded-tl-none'}
                         `}>
-                            {msg.content}
-                            <p className={`text-[10px] mt-1 opacity-70 ${msg.role === 'USER' ? 'text-blue-100' : 'text-text-secondary'}`}>
+                            <div className="markdown-content">
+                                {msg.content.split('\n').map((line, i) => {
+                                    // Basic bold parsing
+                                    const parts = line.split(/(\*\*.*?\*\*)/);
+                                    return (
+                                        <p key={i} className={line.trim() === '' ? 'h-2' : 'mb-1.5 last:mb-0'}>
+                                            {parts.map((part, j) => {
+                                                if (part.startsWith('**') && part.endsWith('**')) {
+                                                    return <strong key={j} className="font-extrabold">{part.slice(2, -2)}</strong>;
+                                                }
+                                                return part;
+                                            })}
+                                        </p>
+                                    );
+                                })}
+                            </div>
+
+                            {msg.role === 'AI' && msg.isSerious && (
+                                <div className="mt-4 pt-4 border-t border-red-50">
+                                    <div className="flex items-center gap-2 mb-3 text-red-600 text-xs font-bold uppercase tracking-wider">
+                                        <AlertTriangle size={14} />
+                                        Medical Professional Recommended
+                                    </div>
+                                    <Link href="/dashboard/appointments/book" className="block w-full">
+                                        <Button
+                                            className="w-full bg-red-600 hover:bg-red-700 text-white border-none shadow-lg shadow-red-200 py-3 rounded-xl flex items-center justify-center gap-2 font-black transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                                        >
+                                            Consult a Doctor Now
+                                            <Send size={14} className="rotate-45" />
+                                        </Button>
+                                    </Link>
+                                </div>
+                            )}
+
+                            <p className={`text-[10px] mt-2 font-medium opacity-60 ${msg.role === 'USER' ? 'text-blue-100' : 'text-text-secondary'}`}>
                                 {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </p>
                         </div>
@@ -168,8 +264,9 @@ export const ChatInterface: React.FC = () => {
                         type="text"
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
-                        placeholder="Type your health question..."
-                        className="flex-1 bg-gray-50 border border-gray-200 rounded-full px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all placeholder:text-gray-400"
+                        placeholder={isLimitReached ? "Daily limit reached" : "Type your health question..."}
+                        disabled={isLimitReached}
+                        className={`flex-1 bg-gray-50 border border-gray-200 rounded-full px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all placeholder:text-gray-400 ${isLimitReached ? 'cursor-not-allowed opacity-60' : ''}`}
                     />
 
                     <Button

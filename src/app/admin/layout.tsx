@@ -18,7 +18,8 @@ import {
     Phone,
     Activity,
     Lightbulb,
-    Heart
+    Heart,
+    Landmark
 } from 'lucide-react';
 
 
@@ -32,6 +33,7 @@ const sidebarItems = [
     { name: 'Staff Management', href: '/admin/staff', icon: ShieldCheck },
     { name: 'Staff Performance', href: '/admin/staff-performance', icon: TrendingUp },
     { name: 'Appointments', href: '/admin/appointments', icon: Calendar },
+    { name: 'Financials & Payouts', href: '/admin/financials', icon: Landmark },
     { name: 'Monitoring', href: '/admin/monitoring', icon: Activity },
     { name: 'Telemedicine Logs', href: '/admin/telemedicine-logs', icon: Phone },
     { name: 'Mental Health Resources', href: '/admin/mental-health-resources', icon: Heart },

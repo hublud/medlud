@@ -3,25 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { X, Clock, User, Calendar, FileText, History } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { Appointment } from '@/types/appointment';
 import { getAppointmentHistory, getAvailableStaff, reassignAppointment, AppointmentHistory } from '@/utils/appointmentManagement';
 
-interface Appointment {
-    id: string;
-    title: string;
-    symptoms: string;
-    status: string;
-    category: string;
-    created_at: string;
-    staff_id: string | null;
-    user?: {
-        full_name: string;
-        email: string;
-    };
-    staff?: {
-        full_name: string;
-        email: string;
-    };
-}
+
 
 interface AppointmentDetailModalProps {
     appointment: Appointment | null;
@@ -84,7 +69,8 @@ export const AppointmentDetailModal: React.FC<AppointmentDetailModalProps> = ({
 
     if (!appointment) return null;
 
-    const getCategoryColor = (category: string) => {
+    const getCategoryColor = (category: string | null | undefined) => {
+        if (!category) return 'bg-gray-100 text-gray-700';
         switch (category) {
             case 'mental-health': return 'bg-purple-100 text-purple-700';
             case 'maternal': return 'bg-pink-100 text-pink-700';
@@ -92,7 +78,8 @@ export const AppointmentDetailModal: React.FC<AppointmentDetailModalProps> = ({
         }
     };
 
-    const getStatusColor = (status: string) => {
+    const getStatusColor = (status: string | null | undefined) => {
+        if (!status) return 'bg-gray-100 text-gray-700';
         switch (status) {
             case 'APPROVED': return 'bg-green-100 text-green-700';
             case 'COMPLETED': return 'bg-blue-100 text-blue-700';
@@ -120,10 +107,10 @@ export const AppointmentDetailModal: React.FC<AppointmentDetailModalProps> = ({
                     {/* Status & Category */}
                     <div className="flex gap-2">
                         <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(appointment.status)}`}>
-                            {appointment.status}
+                            {appointment.status || 'N/A'}
                         </span>
                         <span className={`px-3 py-1 rounded-full text-sm font-medium ${getCategoryColor(appointment.category)}`}>
-                            {appointment.category.replace('-', ' ').toUpperCase()}
+                            {appointment.category ? appointment.category.replace('-', ' ').toUpperCase() : 'GENERAL'}
                         </span>
                     </div>
 
@@ -142,7 +129,7 @@ export const AppointmentDetailModal: React.FC<AppointmentDetailModalProps> = ({
                             <Calendar size={20} className="text-gray-400" />
                             <div>
                                 <p className="text-sm text-gray-500">Created</p>
-                                <p className="font-semibold">{new Date(appointment.created_at).toLocaleString()}</p>
+                                <p className="font-semibold">{appointment.created_at ? new Date(appointment.created_at).toLocaleString() : 'N/A'}</p>
                             </div>
                         </div>
 

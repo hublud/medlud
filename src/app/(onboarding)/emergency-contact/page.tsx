@@ -5,13 +5,14 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Toggle } from '@/components/ui/Toggle';
-import { User, Phone, MapPin, AlertCircle } from 'lucide-react';
+import { User, Phone, MapPin, AlertCircle, ArrowLeft } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 export default function EmergencyContactPage() {
     const router = useRouter();
-    const { updateProfile } = useAuth();
+    const { user } = useAuth();
     const [loading, setLoading] = useState(false);
     const [contactName, setContactName] = useState('');
     const [relationship, setRelationship] = useState('');
@@ -24,32 +25,46 @@ export default function EmergencyContactPage() {
         setLoading(true);
         setError(null);
 
+        const userId = user?.id;
+        if (!userId) {
+            setError('You are not logged in. Please refresh the page.');
+            setLoading(false);
+            return;
+        }
+
         const updates = {
             emergency_contact_name: contactName,
             emergency_contact_relationship: relationship,
             emergency_contact_phone: phoneNumber,
             share_location_emergency: shareLocation,
-            onboarding_step: 'permissions'
+            onboarding_step: 'permissions',
+            updated_at: new Date().toISOString(),
         };
 
-        try {
-            const { error: updateError } = await updateProfile(updates);
+        const { error: dbError } = await supabase
+            .from('profiles')
+            .update(updates)
+            .eq('id', userId);
 
-            if (!updateError) {
-                router.push('/permissions');
-            } else {
-                setError(updateError.message || 'Failed to save emergency contact.');
-            }
-        } catch (err: any) {
-            console.error('Update error:', err);
-            setError('An unexpected error occurred.');
-        } finally {
+        if (dbError) {
+            console.error('[EmergencyContact] DB error:', dbError);
+            setError(dbError.message || 'Failed to save. Please try again.');
             setLoading(false);
+            return;
         }
+
+        router.push('/permissions');
     };
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-500">
+            <button 
+                onClick={() => router.push('/health-profile')}
+                className="flex items-center text-sm font-medium text-text-secondary hover:text-primary transition-colors group mb-2"
+            >
+                <ArrowLeft size={16} className="mr-2 group-hover:-translate-x-1 transition-transform" />
+                Back
+            </button>
             <div className="text-center">
                 <h1 className="text-2xl font-bold text-text-primary">Emergency Contact</h1>
                 <p className="text-text-secondary mt-1">We'll alert them only in urgent situations.</p>

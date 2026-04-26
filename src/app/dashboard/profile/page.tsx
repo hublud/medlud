@@ -13,6 +13,9 @@ import { SecurityPrivacyCard } from '@/components/profile/SecurityPrivacyCard';
 import { NotificationsCard } from '@/components/profile/NotificationsCard';
 import { PermissionsCard } from '@/components/profile/PermissionsCard';
 import { AccountActionsCard } from '@/components/profile/AccountActionsCard';
+import { WalletCard } from '@/components/profile/WalletCard';
+import { BankDetailsCard } from '@/components/profile/BankDetailsCard';
+import { SupportCard } from '@/components/profile/SupportCard';
 
 export default function ProfilePage() {
     const { user, profile, loading } = useAuth();
@@ -45,12 +48,21 @@ export default function ProfilePage() {
     const rawName = getFirstName();
     const formattedName = rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase();
 
+    const getDisplayRole = () => {
+        if (profile?.role === 'admin') return 'Admin';
+        if (profile?.role === 'doctor') return 'Doctor';
+        if (profile?.role === 'staff') return 'Staff';
+        return 'Patient';
+    };
+
     const userData = {
         name: formattedName,
-        role: profile?.role === 'admin' ? 'Admin' : 'Patient',
+        role: getDisplayRole(),
         medludId: profile?.med_id ? `PAT-${profile.med_id}` : 'N/A',
         isVerified: !!profile?.onboarding_completed,
     };
+
+    const isProvider = profile?.role === 'doctor' || profile?.role === 'staff' || profile?.role === 'admin';
 
     return (
         <div className="min-h-screen bg-gray-50/50 pb-20 animate-in fade-in duration-500">
@@ -80,12 +92,15 @@ export default function ProfilePage() {
                     {/* Left Column: Personal & Health Info */}
                     <div className="lg:col-span-2 space-y-6">
                         <PersonalInfoCard />
-                        <HealthInfoCard role="PATIENT" />
+                        <HealthInfoCard role={isProvider ? 'PROVIDER' : 'PATIENT'} />
                         <EmergencyContactsCard />
                     </div>
 
                     {/* Right Column: Settings & Preferences */}
                     <div className="space-y-6">
+                        <WalletCard />
+                        <BankDetailsCard />
+                        <SupportCard />
                         <SecurityPrivacyCard />
                         <NotificationsCard />
                         <PermissionsCard />

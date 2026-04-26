@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Bot, Baby, BrainCircuit, Calendar, Video, MapPin, ArrowRight, ShieldCheck, Lock as LockIcon, LayoutDashboard, Crown } from 'lucide-react';
+import { Bot, Baby, BrainCircuit, Calendar, Video, MapPin, ArrowRight, ShieldCheck, Lock as LockIcon, LayoutDashboard, Crown, Stethoscope, Wallet } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 interface Action {
     title: string;
@@ -20,6 +21,15 @@ interface Action {
 export const ActionGrid: React.FC = () => {
     const { profile } = useAuth();
     const [isPregnant, setIsPregnant] = useState(false);
+    const [settings, setSettings] = useState<any>(null);
+
+    useEffect(() => {
+        const fetchSettings = async () => {
+            const { data } = await supabase.from('platform_settings').select('*').limit(1).single();
+            if (data) setSettings(data);
+        };
+        fetchSettings();
+    }, []);
 
     useEffect(() => {
         // Check if user has pregnancy profile
@@ -33,7 +43,7 @@ export const ActionGrid: React.FC = () => {
     const baseActions: Action[] = [
         {
             title: "Talk To A Doctor / Nurse",
-            description: "Get help from a medical personal",
+            description: `Chat consultation from ₦${settings?.chat_price?.toLocaleString() || '...'}`,
             icon: Calendar,
             color: "bg-emerald-100 text-emerald-600",
             href: '/dashboard/appointments',
@@ -41,10 +51,18 @@ export const ActionGrid: React.FC = () => {
         },
         {
             title: "Telemedicine",
-            description: "Chat, call or video consult",
+            description: `Voice or video from ₦${settings?.voice_price?.toLocaleString() || '...'}`,
             icon: Video,
             color: "bg-indigo-100 text-indigo-600",
             href: '/dashboard/telemedicine',
+            isFeatured: true
+        },
+        {
+            title: "Visit a Specialist",
+            description: `Expert doctors from ₦${settings?.specialist_chat_price?.toLocaleString() || '...'}`,
+            icon: Stethoscope,
+            color: "bg-teal-100 text-teal-600",
+            href: '/dashboard/specialists',
             isFeatured: true
         },
         {
@@ -67,6 +85,13 @@ export const ActionGrid: React.FC = () => {
             icon: MapPin,
             color: "bg-orange-100 text-orange-600",
             href: '/dashboard/hospitals'
+        },
+        {
+            title: "My Wallet",
+            description: `Balance: ₦${profile?.wallet_balance?.toLocaleString() || '0'}`,
+            icon: Wallet,
+            color: "bg-green-100 text-green-700",
+            href: '/dashboard/wallet'
         },
     ];
 

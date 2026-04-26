@@ -61,7 +61,7 @@ export const PregnancySetupForm: React.FC = () => {
             const { error: profileError } = await supabase
                 .from('profiles')
                 .update({
-                    is_maternal: true,
+                    is_pregnant: true,
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', user.id);

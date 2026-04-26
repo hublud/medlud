@@ -43,3 +43,20 @@ next-env.d.ts
 .vercel
 
 test-openai.js
+
+# logs and temporary files
+*.log
+*.txt
+medlud-debug.json
+/tmp/
+/debug_limit.js
+/extract_types.js
+/fix_ts.js
+/fix_ts_2.js
+/test_api.js
+/*.js
+!/next.config.js
+!/tailwind.config.js
+!/postcss.config.js
+*.sql
+

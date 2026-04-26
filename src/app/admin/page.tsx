@@ -27,11 +27,11 @@ interface DashboardStats {
 
 interface RecentUser {
     id: string;
-    full_name: string;
-    email: string;
-    role: string;
-    is_maternal: boolean;
-    created_at: string;
+    full_name: string | null;
+    email: string | null;
+    role: string | null;
+    is_pregnant: boolean | null;
+    created_at: string | null;
 }
 
 export default function AdminDashboardPage() {
@@ -57,7 +57,7 @@ export default function AdminDashboardPage() {
             const { count: maternalCount } = await supabase
                 .from('profiles')
                 .select('*', { count: 'exact', head: true })
-                .eq('is_maternal', true);
+                .eq('is_pregnant', true);
 
             // 3. Fetch Pending Appointments
             const { count: pendingCount } = await supabase
@@ -77,7 +77,7 @@ export default function AdminDashboardPage() {
             // 5. Fetch Recent Registrations
             const { data: recentData } = await supabase
                 .from('profiles')
-                .select('id, full_name, email, role, is_maternal, created_at')
+                .select('id, full_name, email, role, is_pregnant, created_at')
                 .order('created_at', { ascending: false })
                 .limit(5);
 
@@ -227,14 +227,14 @@ export default function AdminDashboardPage() {
                                         </div>
                                         <div>
                                             <p className="font-semibold text-gray-900">
-                                                {user.full_name || user.email.split('@')[0]}
+                                                {user.full_name || (user.email ? user.email.split('@')[0] : 'Unknown')}
                                             </p>
-                                            <p className="text-xs text-gray-500">{getTimeAgo(user.created_at)}</p>
+                                            <p className="text-xs text-gray-500">{user.created_at ? getTimeAgo(user.created_at) : ''}</p>
                                         </div>
                                     </div>
-                                    <span className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ${user.is_maternal ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'
+                                    <span className={`text-xs px-2 py-1 rounded-full font-medium shrink-0 ${user.is_pregnant ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'
                                         }`}>
-                                        {user.is_maternal ? 'Maternal' : user.role === 'patient' ? 'General' : user.role.toUpperCase()}
+                                        {user.is_pregnant ? 'Maternal' : user.role === 'patient' ? 'General' : (user.role?.toUpperCase() || 'USER')}
                                     </span>
                                 </div>
                             ))

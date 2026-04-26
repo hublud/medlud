@@ -13,6 +13,7 @@ interface ActivityItem {
     date: string; // ISO string
     status: string;
     doctorName?: string;
+    created_at?: string;
 }
 
 export const RecentActivity: React.FC = () => {
@@ -35,10 +36,12 @@ export const RecentActivity: React.FC = () => {
                         date,
                         status,
                         doctor_id,
+                        created_at,
                         profiles!appointments_doctor_id_fkey(full_name)
                     `)
                     .eq('user_id', user.id)
-                    .order('date', { ascending: false })
+                    .neq('status', 'PAYMENT_PENDING')
+                    .order('created_at', { ascending: false })
                     .limit(5);
 
                 if (error) {
@@ -46,18 +49,24 @@ export const RecentActivity: React.FC = () => {
                     console.warn('Join failed, retrying without complex join...', error.message);
                     const { data: fallbackData, error: fallbackError } = await supabase
                         .from('appointments')
-                        .select('id, title, date, status, doctor_id')
+                        .select('id, title, date, status, doctor_id, created_at')
                         .eq('user_id', user.id)
-                        .order('date', { ascending: false })
+                        .neq('status', 'PAYMENT_PENDING')
+                        .order('created_at', { ascending: false })
                         .limit(5);
 
-                    if (fallbackError) throw fallbackError;
+                    if (fallbackError) {
+                        console.error('Fallback fetch activities error:', JSON.stringify(fallbackError));
+                        setActivities([]);
+                        return;
+                    }
 
                     setActivities((fallbackData || []).map(apt => ({
                         id: apt.id,
                         title: apt.title || 'Medical Consultation',
-                        date: apt.date,
-                        status: apt.status
+                        date: apt.date || '',
+                        status: apt.status || '',
+                        created_at: apt.created_at
                     })));
                     return;
                 }
@@ -65,14 +74,24 @@ export const RecentActivity: React.FC = () => {
                 const formattedActivities: ActivityItem[] = (appointments || []).map(apt => ({
                     id: apt.id,
                     title: apt.title || 'Medical Consultation',
-                    date: apt.date,
-                    status: apt.status,
-                    doctorName: (apt.profiles as any)?.full_name
+                    date: apt.date || '',
+                    status: apt.status || '',
+                    doctorName: (apt.profiles as any)?.full_name,
+                    created_at: apt.created_at
                 }));
 
-                setActivities(formattedActivities);
-            } catch (error) {
-                console.error('Error fetching activities:', error);
+                setActivities(formattedActivities.filter((apt, index) => {
+                    if (apt.status !== 'PENDING') return true;
+                    const firstIndex = formattedActivities.findIndex(a => 
+                        a.status === 'PENDING' && 
+                        a.title === apt.title && 
+                        a.date === apt.date
+                    );
+                    return index === firstIndex;
+                }));
+            } catch (error: any) {
+                console.error('Error fetching activities:', error?.message || error, JSON.stringify(error, Object.getOwnPropertyNames(error)));
+                setActivities([]);
             } finally {
                 setLoading(false);
             }
@@ -137,9 +156,10 @@ export const RecentActivity: React.FC = () => {
                     {activities.map((item) => {
                         const config = getStatusConfig(item.status);
                         const Icon = config.icon;
-                        const dateObj = new Date(item.date);
+                        const dateObj = new Date(item.date || item.created_at || Date.now());
                         const isValidDate = !isNaN(dateObj.getTime());
                         const timeAgo = isValidDate ? formatDistanceToNow(dateObj, { addSuffix: true }) : item.date;
+                        const formattedDate = isValidDate ? dateObj.toLocaleDateString('en-GB') : item.date;
 
                         return (
                             <Link
@@ -163,7 +183,7 @@ export const RecentActivity: React.FC = () => {
                                         {config.label}
                                     </span>
                                     <span className="text-[10px] text-gray-400 mt-1 block">
-                                        {timeAgo}
+                                        {formattedDate} • {timeAgo}
                                     </span>
                                 </div>
                             </Link>

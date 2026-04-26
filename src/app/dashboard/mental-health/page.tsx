@@ -34,6 +34,27 @@ export default function MentalHealthHub() {
                 {/* Main Options */}
                 <div className="grid gap-6 max-w-2xl mx-auto">
 
+                    {/* Book Consultation */}
+                    <Link href="/dashboard/appointments/book?category=mental-health">
+                        <div className="bg-white rounded-2xl border-2 border-border p-6 hover:border-blue-300 hover:shadow-lg transition-all cursor-pointer group">
+                            <div className="flex items-start gap-4">
+                                <div className="bg-blue-100 p-4 rounded-full group-hover:scale-110 transition-transform">
+                                    <Calendar size={28} className="text-blue-600" />
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="text-xl font-bold text-text-primary mb-2">Start New Consultation</h3>
+                                    <p className="text-text-secondary mb-3">
+                                        Connect with licensed mental health professionals
+                                    </p>
+                                    <div className="flex items-center gap-2 text-sm text-blue-600 font-medium">
+                                        <span>View available slots</span>
+                                        <span>→</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </Link>
+
                     {/* Talk to AI */}
                     <Link href="/dashboard/mental-health/ai-chat">
                         <div className="bg-white rounded-2xl border-2 border-border p-6 hover:border-purple-300 hover:shadow-lg transition-all cursor-pointer group">
@@ -57,27 +78,6 @@ export default function MentalHealthHub() {
                                     <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">Private</span>
                                     <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">Anonymous</span>
                                     <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-medium">24/7</span>
-                                </div>
-                            </div>
-                        </div>
-                    </Link>
-
-                    {/* Book Consultation */}
-                    <Link href="/dashboard/appointments/book?category=mental-health">
-                        <div className="bg-white rounded-2xl border-2 border-border p-6 hover:border-blue-300 hover:shadow-lg transition-all cursor-pointer group">
-                            <div className="flex items-start gap-4">
-                                <div className="bg-blue-100 p-4 rounded-full group-hover:scale-110 transition-transform">
-                                    <Calendar size={28} className="text-blue-600" />
-                                </div>
-                                <div className="flex-1">
-                                    <h3 className="text-xl font-bold text-text-primary mb-2">Start New Consultation</h3>
-                                    <p className="text-text-secondary mb-3">
-                                        Connect with licensed mental health professionals
-                                    </p>
-                                    <div className="flex items-center gap-2 text-sm text-blue-600 font-medium">
-                                        <span>View available slots</span>
-                                        <span>→</span>
-                                    </div>
                                 </div>
                             </div>
                         </div>

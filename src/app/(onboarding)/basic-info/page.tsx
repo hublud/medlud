@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
-import { User, Mail, Phone, Lock, Globe, Eye, EyeOff } from 'lucide-react';
+import { User, Mail, Phone, Lock, Globe, Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { NIGERIAN_STATES } from '@/lib/constants';
 
@@ -52,8 +52,8 @@ export default function BasicInfoPage() {
                 return;
             }
 
-            // Success redirect
-            router.push('/verify-email');
+            // Success redirect - pass email for verification page
+            router.push(`/verify-email?email=${encodeURIComponent(formData.email)}`);
         } catch (err: any) {
             setError('Failed to create account. Please try again.');
             setLoading(false);
@@ -62,6 +62,13 @@ export default function BasicInfoPage() {
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-right-8 duration-500">
+            <button 
+                onClick={() => router.push('/account-type')}
+                className="flex items-center text-sm font-medium text-text-secondary hover:text-primary transition-colors group mb-2"
+            >
+                <ArrowLeft size={16} className="mr-2 group-hover:-translate-x-1 transition-transform" />
+                Back
+            </button>
             <div className="text-center">
                 <h1 className="text-2xl font-bold text-text-primary">Tell us about yourself</h1>
                 <p className="text-text-secondary mt-1">We need this to setup your account</p>

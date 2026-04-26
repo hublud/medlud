@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Megaphone, AlertTriangle, RefreshCw, Download, Users, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { createNotification, broadcastToAllUsers } from '@/utils/notifications';
+import { ManageAnnouncementsModal } from './ManageAnnouncementsModal';
 
 interface QuickActionsPanelProps {
     currentUserId: string;
@@ -13,6 +14,7 @@ export const QuickActionsPanel: React.FC<QuickActionsPanelProps> = ({ currentUse
     const [isProcessing, setIsProcessing] = useState(false);
     const [announcement, setAnnouncement] = useState('');
     const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
+    const [isManageModalOpen, setIsManageModalOpen] = useState(false);
 
     const handleBroadcastAnnouncement = async () => {
         if (!announcement.trim()) {
@@ -142,6 +144,17 @@ export const QuickActionsPanel: React.FC<QuickActionsPanelProps> = ({ currentUse
                             </div>
                         </div>
                     )}
+                    
+                    {!showAnnouncementForm && (
+                        <div className="mt-2 text-center">
+                            <button 
+                                onClick={() => setIsManageModalOpen(true)}
+                                className="text-xs text-blue-600 font-medium hover:underline flex items-center justify-center gap-1 w-full mt-2"
+                            >
+                                Manage History
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Emergency Mode */}
@@ -193,6 +206,12 @@ export const QuickActionsPanel: React.FC<QuickActionsPanelProps> = ({ currentUse
                     </Button>
                 </div>
             </div>
+
+            {/* Modals */}
+            <ManageAnnouncementsModal 
+                isOpen={isManageModalOpen} 
+                onClose={() => setIsManageModalOpen(false)} 
+            />
         </div>
     );
 };
