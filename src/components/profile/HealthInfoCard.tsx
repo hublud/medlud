@@ -98,9 +98,9 @@ export const HealthInfoCard: React.FC<HealthInfoCardProps> = ({ role }) => {
                 setNewItemText('');
                 // Optimistically update the local state to see changes immediately
                 if (modalConfig.type === 'CONDITION') {
-                    setConditions(updatedConditions.map((c, i) => ({ id: i, text: c, color: 'orange' })));
+                    setConditions(updatedConditions.map((c: string, i: number) => ({ id: i, text: c, color: 'orange' })));
                 } else if (modalConfig.type === 'ALLERGY') {
-                    setAllergies(updatedAllergies.map((a, i) => ({ id: i, text: a, color: 'red' })));
+                    setAllergies(updatedAllergies.map((a: string, i: number) => ({ id: i, text: a, color: 'red' })));
                 }
             }
         } catch (err: any) {

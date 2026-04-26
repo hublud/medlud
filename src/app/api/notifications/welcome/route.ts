@@ -17,7 +17,7 @@ export async function POST(req: Request) {
         const { data, error } = await resend.emails.send({
             from: 'Joshua from Medlud <hello@medlud.com>',
             to: email,
-            reply_to: 'informhublud@gmail.com',
+            replyTo: 'informhublud@gmail.com',
             subject: 'A Message from Our Founder – Joshua Nwamife 💙',
             html: `
                 <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; color: #334155; line-height: 1.6;">

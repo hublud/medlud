@@ -64,11 +64,6 @@ export const UnifiedSessionRoom: React.FC<UnifiedSessionRoomProps> = ({ consulta
                     channelName: channelName,
                     uid: randomUid
                 });
-                
-                // If it was already marked as VOICE/VIDEO but missing channel_name, update it
-                if (!cons.channel_name) {
-                    await supabase.from('consultations').update({ channel_name: channelName }).eq('id', cons.id);
-                }
             }
         } catch (error) {
             console.error('Failed to initiate Agora:', error);

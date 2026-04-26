@@ -15,6 +15,7 @@ export async function GET(req: Request) {
                 specialty_type,
                 created_at,
                 status,
+                user_id,
                 user:user_id (full_name)
             `)
             .eq('status', 'active')

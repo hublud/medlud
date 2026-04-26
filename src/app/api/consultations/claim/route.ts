@@ -55,6 +55,7 @@ export async function POST(req: Request) {
                 consultation_id: consultationId,
                 doctor_amount: consultation.doctor_amount,
                 commission_amount: consultation.commission_amount,
+                total_amount: (consultation.doctor_amount || 0) + (consultation.commission_amount || 0),
                 payout_status: 'pending'
             });
 
@@ -65,7 +66,7 @@ export async function POST(req: Request) {
 
         // 4. Create an in-app notification for the patient
         // Assuming we have a notifications table
-        await supabaseAdmin.from('notifications').insert({
+        await supabaseAdmin.from('user_notifications').insert({
             user_id: consultation.user_id,
             title: 'Doctor Joined',
             message: 'A doctor has claimed your consultation and will connect with you shortly.',

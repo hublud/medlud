@@ -21,8 +21,7 @@ export async function GET(req: Request) {
             .select('id, specialty_type')
             .is('doctor_id', null)
             .eq('status', 'active')
-            .lt('created_at', thirtyMinutesAgo)
-            .is('reminded_at', null); // Only remind once
+            .lt('created_at', thirtyMinutesAgo);
 
         if (error) throw error;
 
@@ -37,11 +36,13 @@ export async function GET(req: Request) {
             await broadcastNewConsultation(c.id);
             remindedIds.push(c.id);
             
-            // Mark as reminded to prevent duplicate spam
+            // Optional: Mark as reminded if column exists
+            /*
             await supabaseAdmin
                 .from('consultations')
                 .update({ reminded_at: new Date().toISOString() })
                 .eq('id', c.id);
+            */
         }
 
         return NextResponse.json({ 

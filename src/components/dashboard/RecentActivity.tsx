@@ -66,7 +66,7 @@ export const RecentActivity: React.FC = () => {
                         title: apt.title || 'Medical Consultation',
                         date: apt.date || '',
                         status: apt.status || '',
-                        created_at: apt.created_at
+                        created_at: apt.created_at || undefined
                     })));
                     return;
                 }
@@ -77,7 +77,7 @@ export const RecentActivity: React.FC = () => {
                     date: apt.date || '',
                     status: apt.status || '',
                     doctorName: (apt.profiles as any)?.full_name,
-                    created_at: apt.created_at
+                    created_at: apt.created_at || undefined
                 }));
 
                 setActivities(formattedActivities.filter((apt, index) => {

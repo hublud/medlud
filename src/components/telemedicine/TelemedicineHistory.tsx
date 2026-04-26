@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useState } from 'react';
 import { Box, FileText, Video, Phone, ChevronRight, PlusCircle, Calendar as CalendarIcon, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
