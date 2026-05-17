@@ -69,11 +69,21 @@ export default function PermissionsPage() {
 
         // Send welcome email
         if (user?.email) {
-            await fetch('/api/notifications/welcome', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: user.email }),
-            }).catch(err => console.error('Failed to send welcome email:', err));
+            try {
+                const emailRes = await fetch('/api/notifications/welcome', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: user.email }),
+                });
+                if (!emailRes.ok) {
+                    const errData = await emailRes.json();
+                    console.error('Welcome email failed to send:', errData);
+                } else {
+                    console.log('Welcome email sent successfully!');
+                }
+            } catch (err) {
+                console.error('Failed to execute welcome email request:', err);
+            }
         }
 
         router.push('/completion');
