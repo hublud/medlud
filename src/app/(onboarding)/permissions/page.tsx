@@ -14,11 +14,10 @@ const hardwarePermissions = [
 ];
 
 import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
 
 export default function PermissionsPage() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, updateProfile } = useAuth();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [consents, setConsents] = useState({
@@ -55,10 +54,7 @@ export default function PermissionsPage() {
             updated_at: new Date().toISOString(),
         };
 
-        const { error: dbError } = await supabase
-            .from('profiles')
-            .update(updates)
-            .eq('id', userId);
+        const { error: dbError } = await updateProfile(updates);
 
         if (dbError) {
             console.error('[Permissions] DB error:', dbError);

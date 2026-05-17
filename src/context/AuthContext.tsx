@@ -20,6 +20,14 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Robust helper to prevent client-side network queries from hanging indefinitely
+const withTimeout = <T,>(promise: Promise<T>, ms = 4000, errorMsg = 'Operation timeout'): Promise<T> => {
+    return Promise.race([
+        promise,
+        new Promise<T>((_, reject) => setTimeout(() => reject(new Error(errorMsg)), ms))
+    ]);
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [profile, setProfile] = useState<any>(null);
@@ -33,11 +41,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             try {
                 console.log(`[Auth] Fetching profile (attempt ${i}/${attempts})`);
 
-                const { data, error } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('id', userId)
-                    .maybeSingle();
+                const { data, error } = (await withTimeout(
+                    Promise.resolve(
+                        supabase
+                            .from('profiles')
+                            .select('*')
+                            .eq('id', userId)
+                            .maybeSingle()
+                    ),
+                    4000,
+                    'Profile select timeout'
+                )) as any;
 
                 if (error) throw error;
 
@@ -50,18 +64,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 // If no profile found, create one
                 if (i === 1) { // Only attempt create on first try
                     console.warn('[Auth] Profile not found — creating default');
-                    const { data: userData } = await supabase.auth.getUser();
-                    const { data: created, error: createErr } = await supabase
-                        .from('profiles')
-                        .insert({
-                            id: userId,
-                            email: userData.user?.email,
-                            role: 'patient',
-                            onboarding_completed: false,
-                            updated_at: new Date().toISOString()
-                        })
-                        .select()
-                        .maybeSingle();
+                    const { data: userData } = (await withTimeout(
+                        supabase.auth.getUser(),
+                        4000,
+                        'GetUser timeout'
+                    )) as any;
+                    const { data: created, error: createErr } = (await withTimeout(
+                        Promise.resolve(
+                            supabase
+                                .from('profiles')
+                                .insert({
+                                    id: userId,
+                                    email: userData.user?.email,
+                                    role: 'patient',
+                                    onboarding_completed: false,
+                                    updated_at: new Date().toISOString()
+                                })
+                                .select()
+                                .maybeSingle()
+                        ),
+                        4000,
+                        'Profile insert timeout'
+                    )) as any;
 
                     if (!createErr && created) {
                         setProfile(created);
@@ -108,8 +132,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.log('🔄 [Auth] Initializing authentication...');
             startSafetyTimer();
             try {
-                // Get initial session directly
-                const { data: { session: initialSession }, error } = await supabase.auth.getSession();
+                // Get initial session directly with timeout to prevent silent hangs
+                const { data: { session: initialSession }, error } = (await withTimeout(
+                    supabase.auth.getSession(),
+                    4000,
+                    'Session fetch timeout'
+                )) as any;
 
                 if (error) {
                     console.error('❌ [Auth] Error in initial session load:', error);
@@ -287,7 +315,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 let currentUserEmail = user?.email;
 
                 if (!currentUserId) {
-                    const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
+                    const { data: { session: currentSession }, error: sessionError } = await withTimeout(
+                        supabase.auth.getSession(),
+                        4000,
+                        'updateProfile getSession timeout'
+                    );
                     if (sessionError) throw sessionError;
                     currentUserId = currentSession?.user?.id;
                     currentUserEmail = currentSession?.user?.email;
@@ -300,27 +332,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
 
                 // 2. Ensure profile row exists (Crucial fallback if trigger failed)
-                const { data: existingProfile } = await supabase
-                    .from('profiles')
-                    .select('id')
-                    .eq('id', currentUserId)
-                    .single();
+                const { data: existingProfile } = (await withTimeout(
+                    Promise.resolve(
+                        supabase
+                            .from('profiles')
+                            .select('id')
+                            .eq('id', currentUserId)
+                            .single()
+                    ),
+                    4000,
+                    'updateProfile select id timeout'
+                )) as any;
 
                 if (!existingProfile) {
                     console.warn('⚠️ [updateProfile] Profile missing - creating fresh row');
-                    await supabase.from('profiles').insert({
-                        id: currentUserId,
-                        email: currentUserEmail || '',
-                        role: 'patient'
-                    });
+                    await (withTimeout(
+                        Promise.resolve(
+                            supabase.from('profiles').insert({
+                                id: currentUserId,
+                                email: currentUserEmail || '',
+                                role: 'patient'
+                            })
+                        ),
+                        4000,
+                        'updateProfile insert timeout'
+                    ) as any);
                 }
 
                 // 3. Direct update (simpler, faster, no RPC dependency)
                 console.log(`💾 [updateProfile] Performing direct update (Attempt ${attempt}/${MAX_RETRIES})...`);
-                const { error: updateError } = await supabase
-                    .from('profiles')
-                    .update({ ...updates, updated_at: new Date().toISOString() })
-                    .eq('id', currentUserId);
+                const { error: updateError } = (await withTimeout(
+                    Promise.resolve(
+                        supabase
+                            .from('profiles')
+                            .update({ ...updates, updated_at: new Date().toISOString() })
+                            .eq('id', currentUserId)
+                    ),
+                    5000,
+                    'updateProfile update timeout'
+                )) as any;
 
                 if (updateError) {
                     // Normalize error message for checking

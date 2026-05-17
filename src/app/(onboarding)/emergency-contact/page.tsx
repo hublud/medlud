@@ -8,11 +8,10 @@ import { Toggle } from '@/components/ui/Toggle';
 import { User, Phone, MapPin, AlertCircle, ArrowLeft } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
 
 export default function EmergencyContactPage() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, updateProfile } = useAuth();
     const [loading, setLoading] = useState(false);
     const [contactName, setContactName] = useState('');
     const [relationship, setRelationship] = useState('');
@@ -41,10 +40,7 @@ export default function EmergencyContactPage() {
             updated_at: new Date().toISOString(),
         };
 
-        const { error: dbError } = await supabase
-            .from('profiles')
-            .update(updates)
-            .eq('id', userId);
+        const { error: dbError } = await updateProfile(updates);
 
         if (dbError) {
             console.error('[EmergencyContact] DB error:', dbError);

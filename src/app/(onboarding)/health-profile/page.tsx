@@ -10,11 +10,10 @@ import { BLOOD_GROUPS } from '@/lib/constants';
 import { TagInput } from '@/components/ui/TagInput';
 
 import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
 
 export default function HealthProfilePage() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, updateProfile } = useAuth();
     const [loading, setLoading] = useState(false);
     const [gender, setGender] = useState('');
     const [dateOfBirth, setDateOfBirth] = useState('');
@@ -49,10 +48,7 @@ export default function HealthProfilePage() {
 
         console.log('[HealthProfile] Saving profile for user:', userId);
 
-        const { error: dbError } = await supabase
-            .from('profiles')
-            .update(updates)
-            .eq('id', userId);
+        const { error: dbError } = await updateProfile(updates);
 
         if (dbError) {
             console.error('[HealthProfile] DB error:', dbError);
