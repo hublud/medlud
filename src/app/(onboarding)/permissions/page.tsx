@@ -67,9 +67,9 @@ export default function PermissionsPage() {
             return;
         }
 
-        // Send welcome email in the background
+        // Send welcome email
         if (user?.email) {
-            fetch('/api/notifications/welcome', {
+            await fetch('/api/notifications/welcome', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: user.email }),
