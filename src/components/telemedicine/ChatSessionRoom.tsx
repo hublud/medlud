@@ -3,10 +3,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { ArrowLeft, Send, Clock, AlertCircle, Video, Loader2, Info, X as CloseIcon } from 'lucide-react';
+import { ArrowLeft, Send, Clock, AlertCircle, Video, Loader2, Info, Hospital, Upload, X as CloseIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { calculateAge } from '@/utils/dateUtils';
+import { FacilityReferralFlow } from '@/components/staff/FacilityReferralFlow';
+import { UploadResultModal } from '@/components/appointments/UploadResultModal';
 
 export const ChatSessionRoom: React.FC<{ consultationId: string }> = ({ consultationId }) => {
     const { user } = useAuth();
@@ -21,6 +23,10 @@ export const ChatSessionRoom: React.FC<{ consultationId: string }> = ({ consulta
     const [settings, setSettings] = useState<any>(null);
     const [isInfoOpen, setIsInfoOpen] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    // Referral and Upload Modal states
+    const [isReferModalOpen, setIsReferModalOpen] = useState(false);
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
     useEffect(() => {
         async function initSession() {
@@ -256,6 +262,14 @@ export const ChatSessionRoom: React.FC<{ consultationId: string }> = ({ consulta
                                 )}
                             </button>
                             <button
+                                onClick={() => setIsReferModalOpen(true)}
+                                className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-1.5 rounded-full transition-all text-xs font-bold shadow-sm shadow-indigo-200"
+                                title="Issue Referral / Requisition"
+                            >
+                                <Hospital size={14} />
+                                Refer Facility
+                            </button>
+                            <button
                                 onClick={handleEscalateToVideo}
                                 disabled={isEscalating}
                                 className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-full transition-all text-xs font-bold shadow-sm shadow-emerald-200"
@@ -388,6 +402,16 @@ export const ChatSessionRoom: React.FC<{ consultationId: string }> = ({ consulta
             {!isExpired && (
                 <div className="bg-white border-t p-4">
                     <div className="flex items-center gap-2 max-w-4xl mx-auto">
+                        {isPatient && (
+                            <button
+                                type="button"
+                                onClick={() => setIsUploadModalOpen(true)}
+                                className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-primary rounded-xl transition-colors shrink-0"
+                                title="Upload Clinical Results"
+                            >
+                                <Upload size={20} />
+                            </button>
+                        )}
                         <input
                             type="text"
                             value={inputText}
@@ -399,12 +423,43 @@ export const ChatSessionRoom: React.FC<{ consultationId: string }> = ({ consulta
                         <button
                             onClick={sendMessage}
                             disabled={!inputText.trim()}
-                            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white p-3 rounded-xl transition-colors"
+                            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white p-3 rounded-xl transition-colors shrink-0"
                         >
                             <Send size={20} />
                         </button>
                     </div>
                 </div>
+            )}
+
+            {/* Referral modal for doctors */}
+            {isReferModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl w-full max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl relative animate-in zoom-in-95 duration-250 p-6">
+                        <button
+                            onClick={() => setIsReferModalOpen(false)}
+                            className="absolute top-6 right-6 p-1.5 hover:bg-slate-100 rounded-full transition-colors text-slate-500"
+                        >
+                            <CloseIcon size={18} />
+                        </button>
+                        <FacilityReferralFlow
+                            patientId={session?.user_id!}
+                            doctorId={user?.id!}
+                            callId={consultationId}
+                            onSuccess={() => setIsReferModalOpen(false)}
+                        />
+                    </div>
+                </div>
+            )}
+
+            {/* Results Upload modal for patients */}
+            {isUploadModalOpen && (
+                <UploadResultModal
+                    isOpen={isUploadModalOpen}
+                    onClose={() => setIsUploadModalOpen(false)}
+                    patientId={user?.id!}
+                    callId={consultationId}
+                    onSuccess={() => setIsUploadModalOpen(false)}
+                />
             )}
         </div>
     );

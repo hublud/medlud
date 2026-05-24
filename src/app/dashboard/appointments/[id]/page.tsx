@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, User, MessageSquare, Send, Loader2, Clock, Activity, FileText, AlertCircle, ShieldCheck, Stethoscope, Save, CheckCircle, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, User, MessageSquare, Send, Loader2, Clock, Activity, FileText, AlertCircle, ShieldCheck, Stethoscope, Save, CheckCircle, Image as ImageIcon, Hospital } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { PrescriptionCard } from '@/components/appointments/PrescriptionCard';
+import { UploadResultModal } from '@/components/appointments/UploadResultModal';
 import Link from 'next/link';
 import { ChatMessage, Appointment, Prescription } from '@/types/appointment';
 import { ChatBubble } from '@/components/shared/ChatBubble';
@@ -140,10 +141,32 @@ export default function AppointmentDetailsPage() {
             if (rxError) console.error('Prescriptions error:', JSON.stringify(rxError, null, 2));
             setPrescriptions(rxData as any || []);
 
+            // Fetch Referral Requests for this appointment
+            fetchReferrals(id);
+
         } catch (error: any) {
             console.error('Error fetching appointment (catch):', JSON.stringify(error, null, 2));
         } finally {
             setLoading(false);
+        }
+    };
+
+    const [referrals, setReferrals] = useState<any[]>([]);
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+
+    const fetchReferrals = async (aptId: string) => {
+        try {
+            const { data } = await (supabase as any)
+                .from('referral_requests')
+                .select(`
+                    *,
+                    facility:facilities(name, partner_status, accreditation_status)
+                `)
+                .eq('appointment_id', aptId)
+                .eq('status', 'pending');
+            setReferrals(data || []);
+        } catch (err) {
+            console.error('Error fetching case referrals:', err);
         }
     };
 
@@ -503,6 +526,47 @@ export default function AppointmentDetailsPage() {
                             )}
                         </div>
 
+                        {/* Referral requests card */}
+                        {referrals.length > 0 && (
+                            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
+                                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                                    <Hospital size={16} className="text-primary" /> Active Referrals & Tests
+                                </h3>
+                                <div className="space-y-3">
+                                    {referrals.map(ref => (
+                                        <div key={ref.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[9px] font-extrabold uppercase bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+                                                    {ref.request_type} referral
+                                                </span>
+                                                <span className="text-[9px] font-bold text-slate-400">
+                                                    {new Date(ref.created_at).toLocaleDateString()}
+                                                </span>
+                                            </div>
+                                            
+                                            <p className="text-xs font-bold text-slate-800">
+                                                📍 {ref.is_external ? ref.external_facility_name : ref.facility?.name}
+                                            </p>
+                                            
+                                            {ref.clinical_notes && (
+                                                <p className="text-[11px] text-slate-500 italic leading-normal">
+                                                    "{ref.clinical_notes}"
+                                                </p>
+                                            )}
+
+                                            <Button
+                                                size="sm"
+                                                className="w-full bg-primary hover:bg-primary-hover text-white text-xs font-bold h-8 mt-1.5"
+                                                onClick={() => setIsUploadModalOpen(true)}
+                                            >
+                                                Upload Results
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Prescriptions - MOVED HERE */}
                         {prescriptions.length > 0 && (
                             <div className="animate-in slide-in-from-right-4 duration-500">
@@ -535,6 +599,18 @@ export default function AppointmentDetailsPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Results Upload Modal */}
+            <UploadResultModal
+                isOpen={isUploadModalOpen}
+                onClose={() => setIsUploadModalOpen(false)}
+                patientId={userRef.current!}
+                appointmentId={appointment.id}
+                onSuccess={() => {
+                    fetchReferrals(appointment.id);
+                    fetchAppointmentDetails(appointment.id);
+                }}
+            />
         </div>
     );
 }

@@ -19,7 +19,8 @@ import {
     Activity,
     Lightbulb,
     Heart,
-    Landmark
+    Landmark,
+    Hospital
 } from 'lucide-react';
 
 
@@ -29,6 +30,7 @@ import { useRouter } from 'next/navigation';
 const sidebarItems = [
     { name: 'Overview', href: '/admin', icon: LayoutDashboard },
     { name: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
+    { name: 'Partnered Facilities', href: '/admin/facilities', icon: Hospital },
     { name: 'User Management', href: '/admin/users', icon: Users },
     { name: 'Staff Management', href: '/admin/staff', icon: ShieldCheck },
     { name: 'Staff Performance', href: '/admin/staff-performance', icon: TrendingUp },

@@ -9,6 +9,8 @@ import { AISummaryCard } from '@/components/staff/AISummaryCard';
 import { PrescriptionBuilder } from '@/components/staff/PrescriptionBuilder';
 import { DoctorChat } from '@/components/staff/DoctorChat';
 import { TransferCaseModal } from '@/components/staff/TransferCaseModal';
+import { FacilityReferralFlow } from '@/components/staff/FacilityReferralFlow';
+import { ReviewResultModal } from '@/components/staff/ReviewResultModal';
 import { Appointment, Prescription, ChatMessage } from '@/types/appointment';
 import { supabase } from '@/lib/supabase';
 import {
@@ -29,6 +31,12 @@ export default function CaseReviewPage() {
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     const [isAdmin, setIsAdmin] = useState(false);
     const dummyUserRef = useRef<string | null>(null); // To store current user ID
+
+    // Referral and Uploaded Results states
+    const [clinicalTab, setClinicalTab] = useState<'PRESCRIPTION' | 'REFERRAL'>('PRESCRIPTION');
+    const [pendingResults, setPendingResults] = useState<any[]>([]);
+    const [selectedResult, setSelectedResult] = useState<any>(null);
+    const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
 
     useEffect(() => {
         if (params.id) {
@@ -68,6 +76,27 @@ export default function CaseReviewPage() {
 
         return () => clearInterval(interval);
     }, [params.id]);
+
+    useEffect(() => {
+        if (appointment?.user_id) {
+            fetchPendingResults();
+        }
+    }, [appointment?.user_id]);
+
+    const fetchPendingResults = async () => {
+        if (!appointment?.user_id) return;
+        const { data } = await (supabase as any)
+            .from('uploaded_medical_results')
+            .select(`
+                *,
+                patient:profiles(full_name),
+                referral_request:referral_requests(request_type, clinical_notes)
+            `)
+            .eq('patient_id', appointment.user_id)
+            .eq('status', 'pending_review');
+        
+        setPendingResults(data || []);
+    };
 
     const fetchCaseDetails = async (id: string, isSilent = false) => {
         try {
@@ -377,6 +406,31 @@ export default function CaseReviewPage() {
                     </div>
                 </div>
 
+                {/* Pending Medical Results Alert Banner */}
+                {pendingResults.length > 0 && (
+                    <div className="bg-gradient-to-br from-amber-50 to-orange-100/50 border border-amber-200 rounded-3xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in slide-in-from-top-2 duration-300">
+                        <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 bg-amber-100 text-amber-800 rounded-xl flex items-center justify-center shrink-0">
+                                <FileText size={20} />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-slate-900 text-sm">New Medical Results Awaiting Clinical Review</h3>
+                                <p className="text-xs text-slate-600 mt-0.5">Patient has uploaded {pendingResults.length} new test result(s) from external or partnered visits.</p>
+                            </div>
+                        </div>
+                        <Button 
+                            size="sm" 
+                            className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold"
+                            onClick={() => {
+                                setSelectedResult(pendingResults[0]);
+                                setIsReviewModalOpen(true);
+                            }}
+                        >
+                            Review Document
+                        </Button>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Left Column: Patient Info & Chat */}
                     <div className="lg:col-span-2 space-y-6">
@@ -420,26 +474,48 @@ export default function CaseReviewPage() {
 
                         {/* Clinical Actions */}
                         <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-                            <h2 className="font-bold text-gray-900 mb-4">Clinical Response</h2>
-
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="text-sm font-medium text-gray-700 mb-1 block">Clinical Notes / Diagnosis</label>
-                                    <textarea
-                                        className="w-full border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                                        rows={4}
-                                        placeholder="Enter your diagnosis and internal notes..."
-                                        value={doctorNotes}
-                                        onChange={(e) => setDoctorNotes(e.target.value)}
-                                    ></textarea>
-                                </div>
-
-                                <PrescriptionBuilder
-                                    value={prescriptions}
-                                    onChange={setPrescriptions}
-                                    appointmentId={appointment.id}
-                                />
+                            <div className="flex border-b border-slate-100 mb-4 pb-2">
+                                <button
+                                    onClick={() => setClinicalTab('PRESCRIPTION')}
+                                    className={`flex-1 text-center py-2 text-xs font-bold transition-all border-b-2 ${clinicalTab === 'PRESCRIPTION' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-400'}`}
+                                >
+                                    Prescription Builder
+                                </button>
+                                <button
+                                    onClick={() => setClinicalTab('REFERRAL')}
+                                    className={`flex-1 text-center py-2 text-xs font-bold transition-all border-b-2 ${clinicalTab === 'REFERRAL' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-400'}`}
+                                >
+                                    Referrals & Lab Requests
+                                </button>
                             </div>
+
+                            {clinicalTab === 'PRESCRIPTION' ? (
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-sm font-medium text-gray-700 mb-1 block">Clinical Notes / Diagnosis</label>
+                                        <textarea
+                                            className="w-full border border-gray-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                                            rows={4}
+                                            placeholder="Enter your diagnosis and internal notes..."
+                                            value={doctorNotes}
+                                            onChange={(e) => setDoctorNotes(e.target.value)}
+                                        ></textarea>
+                                    </div>
+
+                                    <PrescriptionBuilder
+                                        value={prescriptions}
+                                        onChange={setPrescriptions}
+                                        appointmentId={appointment.id}
+                                    />
+                                </div>
+                            ) : (
+                                <FacilityReferralFlow
+                                    patientId={appointment.user_id!}
+                                    doctorId={dummyUserRef.current!}
+                                    appointmentId={appointment.id}
+                                    onSuccess={() => setClinicalTab('PRESCRIPTION')}
+                                />
+                            )}
                         </div>
                     </div>
                 </div>
@@ -451,6 +527,20 @@ export default function CaseReviewPage() {
                 onTransfer={handleTransferCase}
                 currentDoctorId={dummyUserRef.current || undefined}
             />
+
+            {selectedResult && (
+                <ReviewResultModal
+                    isOpen={isReviewModalOpen}
+                    onClose={() => setIsReviewModalOpen(false)}
+                    result={selectedResult}
+                    doctorId={dummyUserRef.current!}
+                    appointmentId={appointment.id}
+                    onSuccess={() => {
+                        fetchPendingResults();
+                        fetchCaseDetails(appointment.id);
+                    }}
+                />
+            )}
         </div>
     );
 }
