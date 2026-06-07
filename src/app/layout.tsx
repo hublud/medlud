@@ -4,6 +4,7 @@ import './globals.css';
 import { Footer } from '@/components/ui/Footer';
 import { AuthProvider } from '@/context/AuthContext';
 import GlobalErrorSuppressor from '@/components/GlobalErrorSuppressor';
+import { TelemedicineReminder } from '@/components/staff/TelemedicineReminder';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
@@ -25,6 +26,7 @@ export default function RootLayout({
       <body className={`${inter.variable} antialiased font-sans bg-background text-text-primary flex flex-col min-h-screen`}>
         <AuthProvider>
           <GlobalErrorSuppressor />
+          <TelemedicineReminder />
           <main className="flex-1 w-full">
             {children}
           </main>

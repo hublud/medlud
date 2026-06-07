@@ -231,3 +231,159 @@ export async function notifySLAReminder(appointmentId: string, targetRole: 'USER
         console.error('Error in notifySLAReminder:', err);
     }
 }
+
+/**
+ * Send onboarding email to a newly enrolled facility
+ */
+export async function sendPartnerOnboardingEmail({ to, facilityName, loginEmail, tempPassword, setupUrl }: {
+    to: string,
+    facilityName: string,
+    loginEmail: string,
+    tempPassword?: string,
+    setupUrl: string
+}) {
+    const title = `Welcome to Medlud, ${facilityName}!`;
+    const subject = `Set Up Your Medlud Partner Account - ${facilityName}`;
+
+    let credentialsSection = '';
+    if (tempPassword) {
+        credentialsSection = `
+            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 24px 0;">
+                <h3 style="color: #0f172a; margin-top: 0; margin-bottom: 12px; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Your Login Credentials</h3>
+                <p style="margin: 4px 0; font-size: 15px;"><strong>Email Address:</strong> <code style="background-color: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace;">${loginEmail}</code></p>
+                <p style="margin: 4px 0; font-size: 15px;"><strong>Temporary Password:</strong> <code style="background-color: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: monospace;">${tempPassword}</code></p>
+                <p style="margin-top: 12px; margin-bottom: 0; font-size: 12px; color: #64748b; font-style: italic;">Note: For security, please change your password under your settings profile after your first log in.</p>
+            </div>
+        `;
+    } else {
+        credentialsSection = `
+            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 24px 0;">
+                <p style="margin: 0; font-size: 15px;">Your account is already configured. You can use your existing Medlud credentials to log in.</p>
+            </div>
+        `;
+    }
+
+    const body = `
+        <p style="font-size: 16px; line-height: 1.6; color: #334155;">Hello Administrator,</p>
+        <p style="font-size: 16px; line-height: 1.6; color: #334155;">Your facility, <strong>${facilityName}</strong>, is now enrolled in the Medlud Clinical Network! We are thrilled to partner with you to deliver seamless digital healthcare experiences.</p>
+        
+        ${credentialsSection}
+
+        <h3 style="color: #0f172a; font-size: 16px; margin-top: 30px; margin-bottom: 15px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">How the Medlud Network Works</h3>
+        
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+            <tr>
+                <td style="width: 40px; vertical-align: top; padding-top: 4px;">
+                    <span style="display: inline-block; width: 28px; height: 28px; line-height: 28px; background-color: #e6f4f1; color: #0d9488; font-weight: bold; border-radius: 50%; text-align: center; font-size: 14px;">1</span>
+                </td>
+                <td style="padding-bottom: 16px;">
+                    <strong style="color: #0f172a; font-size: 15px; display: block; margin-bottom: 4px;">Doctors Refer Patients</strong>
+                    <span style="color: #64748b; font-size: 14px; line-height: 1.5;">Physicians across our telemedicine platform refer patients to your facility for diagnostic scans, lab panels, pharmacy prescriptions, or clinic consultations.</span>
+                </td>
+            </tr>
+            <tr>
+                <td style="width: 40px; vertical-align: top; padding-top: 4px;">
+                    <span style="display: inline-block; width: 28px; height: 28px; line-height: 28px; background-color: #e6f4f1; color: #0d9488; font-weight: bold; border-radius: 50%; text-align: center; font-size: 14px;">2</span>
+                </td>
+                <td style="padding-bottom: 16px;">
+                    <strong style="color: #0f172a; font-size: 15px; display: block; margin-bottom: 4px;">Access Your Partner Portal</strong>
+                    <span style="color: #64748b; font-size: 14px; line-height: 1.5;">Log in using your partner dashboard credentials to see pending referrals, match patient medical records, and track incoming clinical orders in real-time.</span>
+                </td>
+            </tr>
+            <tr>
+                <td style="width: 40px; vertical-align: top; padding-top: 4px;">
+                    <span style="display: inline-block; width: 28px; height: 28px; line-height: 28px; background-color: #e6f4f1; color: #0d9488; font-weight: bold; border-radius: 50%; text-align: center; font-size: 14px;">3</span>
+                </td>
+                <td style="padding-bottom: 16px;">
+                    <strong style="color: #0f172a; font-size: 15px; display: block; margin-bottom: 4px;">Upload Diagnostic Reports & Findings</strong>
+                    <span style="color: #64748b; font-size: 14px; line-height: 1.5;">Drag and drop laboratory test results, ultrasound/x-ray scans, or pharmacy receipts directly into the patient's referral details block.</span>
+                </td>
+            </tr>
+            <tr>
+                <td style="width: 40px; vertical-align: top; padding-top: 4px;">
+                    <span style="display: inline-block; width: 28px; height: 28px; line-height: 28px; background-color: #e6f4f1; color: #0d9488; font-weight: bold; border-radius: 50%; text-align: center; font-size: 14px;">4</span>
+                </td>
+                <td style="padding-bottom: 0;">
+                    <strong style="color: #0f172a; font-size: 15px; display: block; margin-bottom: 4px;">Instant Sync with Consulting Doctor</strong>
+                    <span style="color: #64748b; font-size: 14px; line-height: 1.5;">Once you submit findings, the data instantly updates the doctor's active chart, enabling faster follow-ups and optimal patient care.</span>
+                </td>
+            </tr>
+        </table>
+
+        <p style="font-size: 14px; line-height: 1.6; color: #64748b; margin-top: 24px;">Please click the button below to sign in and set up your partner account.</p>
+    `;
+
+    return await sendMedludEmail({
+        to,
+        subject,
+        title,
+        body,
+        actionUrl: setupUrl,
+        actionText: 'Sign In & Set Up Account'
+    });
+}
+
+/**
+ * Send an email notification to a patient when a telemedicine call/chat is scheduled/escalated
+ */
+export async function notifyPatientOfScheduledCall({
+    appointmentId,
+    patientEmail,
+    patientName,
+    doctorName,
+    callType,
+    scheduledDate,
+    duration
+}: {
+    appointmentId: string;
+    patientEmail: string;
+    patientName: string;
+    doctorName: string;
+    callType: 'voice' | 'video' | 'chat';
+    scheduledDate: string;
+    duration: string;
+}) {
+    try {
+        const typeLabel = callType === 'chat' ? 'Telemedicine Chat Session' :
+                          callType === 'video' ? 'Telemedicine Video Consultation' : 'Telemedicine Voice Consultation';
+        
+        let dateFormatted = scheduledDate;
+        try {
+            dateFormatted = new Date(scheduledDate).toLocaleString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } catch (e) {
+            console.error('Error formatting date:', e);
+        }
+
+        await sendMedludEmail({
+            to: patientEmail,
+            subject: `Medlud Telemedicine Scheduled: ${typeLabel}`,
+            title: `Your Telemedicine Consultation is Scheduled`,
+            body: `
+                <p>Hello <strong>${patientName}</strong>,</p>
+                <p><strong>Dr. ${doctorName}</strong> has escalated/scheduled a <strong>${typeLabel}</strong> for your ongoing clinical care.</p>
+                
+                <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 24px 0; color: #334155;">
+                    <p style="margin: 4px 0; font-size: 15px;"><strong>Consultation Channel:</strong> ${typeLabel}</p>
+                    <p style="margin: 4px 0; font-size: 15px;"><strong>Scheduled Time:</strong> ${dateFormatted}</p>
+                    <p style="margin: 4px 0; font-size: 15px;"><strong>Session Duration:</strong> ${duration}</p>
+                    <p style="margin-top: 12px; margin-bottom: 0; font-size: 12px; color: #64748b; font-style: italic;">Please ensure you are online and have a stable internet connection at the scheduled time.</p>
+                </div>
+
+                <p style="font-size: 15px;">You can join the consultation directly from your dashboard or click the button below to join the call room.</p>
+            `,
+            actionUrl: `/dashboard/appointments/${appointmentId}`,
+            actionText: 'Join Scheduled Session'
+        });
+    } catch (err) {
+        console.error('Error in notifyPatientOfScheduledCall:', err);
+    }
+}
+
+

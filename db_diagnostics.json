@@ -1,0 +1,20 @@
+{
+  "node_version": "v25.9.0",
+  "fetch_available": true,
+  "tests": [
+    {
+      "name": "Anon Key",
+      "status": "SUCCESS",
+      "key_preview": "eyJhbGciOi..."
+    },
+    {
+      "name": "Service Role Key",
+      "status": "SUCCESS",
+      "key_preview": "eyJhbGciOi..."
+    }
+  ],
+  "fetch_test": {
+    "status": 404,
+    "ok": false
+  }
+}

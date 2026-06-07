@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Save, CheckCircle, Clock, User, AlertTriangle, FileText, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle, Clock, User, AlertTriangle, FileText, Loader2, Sparkles, ListTodo } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { AISummaryCard } from '@/components/staff/AISummaryCard';
@@ -11,6 +11,7 @@ import { DoctorChat } from '@/components/staff/DoctorChat';
 import { TransferCaseModal } from '@/components/staff/TransferCaseModal';
 import { FacilityReferralFlow } from '@/components/staff/FacilityReferralFlow';
 import { ReviewResultModal } from '@/components/staff/ReviewResultModal';
+import { EscalateTelemedicineModal } from '@/components/staff/EscalateTelemedicineModal';
 import { Appointment, Prescription, ChatMessage } from '@/types/appointment';
 import { supabase } from '@/lib/supabase';
 import {
@@ -29,11 +30,22 @@ export default function CaseReviewPage() {
     const [doctorNotes, setDoctorNotes] = useState('');
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+    const [isEscalateModalOpen, setIsEscalateModalOpen] = useState(false);
     const [isAdmin, setIsAdmin] = useState(false);
     const dummyUserRef = useRef<string | null>(null); // To store current user ID
 
     // Referral and Uploaded Results states
     const [clinicalTab, setClinicalTab] = useState<'PRESCRIPTION' | 'REFERRAL'>('PRESCRIPTION');
+    
+    // Follow-up states
+    const [followUpType, setFollowUpType] = useState<'medication' | 'lab' | 'referral' | 'symptom' | 'pregnancy' | 'chronic_disease'>('symptom');
+    const [followUpInterval, setFollowUpInterval] = useState<number>(3);
+    const [followUpQuestions, setFollowUpQuestions] = useState<string>(
+        'How are you feeling today compared to your consultation date?\nAre you experiencing any side effects?\nHave your symptoms improved?'
+    );
+    const [followUpChecklist, setFollowUpChecklist] = useState<string>('Check symptoms, Log wellness score');
+    const [isAiLoading, setIsAiLoading] = useState(false);
+
     const [pendingResults, setPendingResults] = useState<any[]>([]);
     const [selectedResult, setSelectedResult] = useState<any>(null);
     const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -96,6 +108,40 @@ export default function CaseReviewPage() {
             .eq('status', 'pending_review');
         
         setPendingResults(data || []);
+    };
+
+    const handleGetAiFollowUpRecommendations = async () => {
+        if (!appointment) return;
+        setIsAiLoading(true);
+        try {
+            const isPregnant = (appointment.patient as any)?.gender === 'female' && (appointment.patient as any)?.is_pregnant;
+            const res = await fetch('/api/ai/follow-up-recommendations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    diagnosisNotes: doctorNotes,
+                    treatmentInstructions: prescriptions.map(p => `${p.medication} ${p.dosage} ${p.frequency}`).join(', '),
+                    symptoms: appointment.symptoms || appointment.description,
+                    isPregnant,
+                    knownConditions: (appointment.patient as any)?.known_conditions || ''
+                })
+            });
+            const data = await res.json();
+            if (data.success && data.data) {
+                const rec = data.data;
+                setFollowUpType(rec.followUpType || 'symptom');
+                setFollowUpInterval(rec.intervalDays || 3);
+                setFollowUpQuestions(rec.questions?.join('\n') || '');
+                setFollowUpChecklist(rec.checklist?.join(', ') || '');
+            } else {
+                alert('Could not retrieve AI recommendations. Using defaults.');
+            }
+        } catch (e) {
+            console.error('AI follow-up error:', e);
+            alert('Could not retrieve AI recommendations. Using defaults.');
+        } finally {
+            setIsAiLoading(false);
+        }
     };
 
     const fetchCaseDetails = async (id: string, isSilent = false) => {
@@ -265,6 +311,87 @@ export default function CaseReviewPage() {
                 await notifyPatientOfPrescription(appointment.id, prescriptions.length);
             }
 
+            // 3. Save Custom EMR entries (consultation_history, diagnosis_records, prescription_history)
+            const { error: emrConsultError } = await (supabase as any)
+                .from('consultation_history')
+                .insert({
+                    appointment_id: appointment.id,
+                    patient_id: appointment.user_id,
+                    doctor_id: dummyUserRef.current,
+                    symptoms: appointment.symptoms || appointment.description,
+                    diagnosis_notes: doctorNotes,
+                    treatment_plan: prescriptions.map(p => `${p.medication} ${p.dosage} ${p.frequency}`).join('\n'),
+                    soap_subjective: 'Patient reports: ' + (appointment.description || appointment.symptoms),
+                    soap_assessment: doctorNotes || 'In Review',
+                    soap_plan: 'Follow-up planned in ' + followUpInterval + ' days'
+                });
+            if (emrConsultError) console.error('Error saving consultation EMR history:', emrConsultError);
+
+            if (doctorNotes) {
+                const { error: emrDiagError } = await (supabase as any)
+                    .from('diagnosis_records')
+                    .insert({
+                        patient_id: appointment.user_id!,
+                        doctor_id: dummyUserRef.current,
+                        appointment_id: appointment.id,
+                        diagnosis: doctorNotes.split('\n')[0] || 'Unspecified Diagnosis',
+                        severity: appointment.priority === 'URGENT' || appointment.priority === 'HIGH' ? 'SEVERE' : 'MODERATE',
+                        status: 'ACTIVE'
+                    });
+                if (emrDiagError) console.error('Error saving diagnosis EMR:', emrDiagError);
+            }
+
+            if (prescriptions.length > 0) {
+                const pxToSave = prescriptions.map(p => ({
+                    patient_id: appointment.user_id!,
+                    doctor_id: dummyUserRef.current,
+                    appointment_id: appointment.id,
+                    medication: p.medication,
+                    dosage: p.dosage,
+                    frequency: p.frequency,
+                    duration: p.duration,
+                    notes: p.notes,
+                    pharmacy_fulfillment_status: 'pending'
+                }));
+                const { error: emrPxError } = await (supabase as any).from('prescription_history').insert(pxToSave);
+                if (emrPxError) console.error('Error saving prescription EMR history:', emrPxError);
+            }
+
+            // 4. Save Follow-Up Schedule
+            const followUpQuestionsArray = followUpQuestions
+                .split('\n')
+                .map(q => q.trim())
+                .filter(q => q.length > 0);
+            
+            const followUpChecklistArray = followUpChecklist
+                .split(',')
+                .map(c => c.trim())
+                .filter(c => c.length > 0);
+
+            const followUpDetails = {
+                questions: followUpQuestionsArray,
+                checklist: followUpChecklistArray
+            };
+
+            const scheduledAtDate = new Date();
+            scheduledAtDate.setDate(scheduledAtDate.getDate() + followUpInterval);
+
+            const { error: followUpError } = await (supabase as any)
+                .from('follow_up_schedules')
+                .insert({
+                    appointment_id: appointment.id,
+                    doctor_id: dummyUserRef.current,
+                    patient_id: appointment.user_id,
+                    follow_up_type: followUpType,
+                    details: followUpDetails as any,
+                    scheduled_at: scheduledAtDate.toISOString(),
+                    status: 'Scheduled'
+                });
+
+            if (followUpError) {
+                console.error('Error saving follow-up schedule:', followUpError);
+            }
+
             // Notify Patient of case completion
             await notifyPatientOfAppointmentEvent(appointment.id, 'COMPLETED', { note: doctorNotes });
 
@@ -365,6 +492,11 @@ export default function CaseReviewPage() {
                         </div>
                     </div>
                     <div className="flex gap-2">
+                        <Link href={`/dashboard/staff/emr/${appointment.user_id}`}>
+                            <Button variant="outline" size="sm" className="text-emerald-600 hover:bg-emerald-50 border-emerald-100 font-bold transition-all">
+                                <FileText size={16} className="mr-1.5" /> View EMR Profile
+                            </Button>
+                        </Link>
                         <Link href="/dashboard">
                             <Button variant="ghost" size="sm" className="text-gray-500 hover:text-primary transition-all">
                                 <ArrowLeft size={16} className="mr-1.5" /> Patient View
@@ -378,6 +510,13 @@ export default function CaseReviewPage() {
                             <>
                                 {(appointment.doctor_id === dummyUserRef.current || isAdmin) && (
                                     <>
+                                        <Button
+                                            variant="outline"
+                                            className="text-indigo-600 border-indigo-100 bg-indigo-50/50 hover:bg-indigo-50 font-bold transition-all"
+                                            onClick={() => setIsEscalateModalOpen(true)}
+                                        >
+                                            <Sparkles size={16} className="mr-1.5 text-indigo-500 animate-pulse" /> Escalate Case
+                                        </Button>
                                         <Button
                                             variant="outline"
                                             className="bg-white"
@@ -517,6 +656,77 @@ export default function CaseReviewPage() {
                                 />
                             )}
                         </div>
+
+                        {/* Smart Follow-Up Scheduler Card */}
+                        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm space-y-4">
+                            <h3 className="text-sm font-bold text-gray-900 flex items-center justify-between">
+                                <span className="flex items-center gap-2">
+                                    <ListTodo size={18} className="text-emerald-600" />
+                                    Smart Follow-Up Planner
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={handleGetAiFollowUpRecommendations}
+                                    disabled={isAiLoading}
+                                    className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100/80 px-2 py-1 rounded-lg flex items-center gap-1 transition-all disabled:opacity-60 cursor-pointer"
+                                >
+                                    <Sparkles size={12} className={isAiLoading ? 'animate-pulse' : ''} />
+                                    {isAiLoading ? 'Analyzing...' : 'AI Suggest'}
+                                </button>
+                            </h3>
+                            
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-700 block mb-1">Follow-Up Type</label>
+                                    <select
+                                        value={followUpType}
+                                        onChange={(e) => setFollowUpType(e.target.value as any)}
+                                        className="w-full text-xs border border-gray-200 rounded-lg p-2 bg-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                    >
+                                        <option value="symptom">Symptom Follow-Up</option>
+                                        <option value="medication">Medication Follow-Up</option>
+                                        <option value="lab">Lab Follow-Up</option>
+                                        <option value="referral">Referral Follow-Up</option>
+                                        <option value="pregnancy">Maternal/Pregnancy Follow-Up</option>
+                                        <option value="chronic_disease">Chronic Disease Follow-Up</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="text-xs font-bold text-slate-700 block mb-1">Interval (Days from now)</label>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={60}
+                                        value={followUpInterval}
+                                        onChange={(e) => setFollowUpInterval(parseInt(e.target.value) || 3)}
+                                        className="w-full text-xs border border-gray-200 rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-xs font-bold text-slate-700 block mb-1">Checklist Items (Comma-separated)</label>
+                                    <input
+                                        type="text"
+                                        value={followUpChecklist}
+                                        onChange={(e) => setFollowUpChecklist(e.target.value)}
+                                        placeholder="e.g. Confirm meds, Log vitals"
+                                        className="w-full text-xs border border-gray-200 rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-xs font-bold text-slate-700 block mb-1">Questions (One per line)</label>
+                                    <textarea
+                                        value={followUpQuestions}
+                                        onChange={(e) => setFollowUpQuestions(e.target.value)}
+                                        rows={3}
+                                        className="w-full text-xs border border-gray-200 rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                        placeholder="Enter check-up questions..."
+                                    />
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -526,6 +736,19 @@ export default function CaseReviewPage() {
                 onClose={() => setIsTransferModalOpen(false)}
                 onTransfer={handleTransferCase}
                 currentDoctorId={dummyUserRef.current || undefined}
+            />
+
+            <EscalateTelemedicineModal
+                isOpen={isEscalateModalOpen}
+                onClose={() => setIsEscalateModalOpen(false)}
+                patientId={appointment.user_id!}
+                patientName={getPatientName()}
+                patientEmail={(appointment.patient as any)?.email}
+                doctorId={dummyUserRef.current!}
+                doctorName={appointment.doctor?.full_name || 'Doctor'}
+                onSuccess={() => {
+                    fetchCaseDetails(appointment.id);
+                }}
             />
 
             {selectedResult && (

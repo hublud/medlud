@@ -10,6 +10,25 @@ import { User, Mail, Phone, Lock, Globe, Eye, EyeOff, ArrowLeft } from 'lucide-r
 import { useAuth } from '@/context/AuthContext';
 import { NIGERIAN_STATES } from '@/lib/constants';
 
+const getPasswordStrengthError = (password: string): string | null => {
+    if (password.length < 8) {
+        return "Password must be at least 8 characters long.";
+    }
+    if (!/[A-Z]/.test(password)) {
+        return "Password must contain at least one uppercase letter.";
+    }
+    if (!/[a-z]/.test(password)) {
+        return "Password must contain at least one lowercase letter.";
+    }
+    if (!/\d/.test(password)) {
+        return "Password must contain at least one number.";
+    }
+    if (!/[@$!%*?&#_]/.test(password)) {
+        return "Password must contain at least one special character (e.g. @$!%*?&#_).";
+    }
+    return null;
+};
+
 export default function BasicInfoPage() {
     const router = useRouter();
     const { signUp } = useAuth();
@@ -34,6 +53,14 @@ export default function BasicInfoPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Enforce strong password validation
+        const passwordError = getPasswordStrengthError(formData.password);
+        if (passwordError) {
+            setError(passwordError);
+            return;
+        }
+
         setLoading(true);
         setError(null);
 

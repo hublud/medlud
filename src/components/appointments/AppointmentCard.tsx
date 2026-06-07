@@ -6,7 +6,7 @@ export interface AppointmentCase {
     id: string;
     title: string;
     date: string;
-    status: 'PENDING' | 'RESPONDED' | 'COMPLETED';
+    status: 'PENDING' | 'RESPONDED' | 'COMPLETED' | 'SCHEDULED' | string;
     symptoms: string;
     doctorName?: string;
     doctor?: { full_name: string };
@@ -23,6 +23,7 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({ data }) => {
             case 'PENDING': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
             case 'RESPONDED': return 'bg-blue-100 text-blue-700 border-blue-200';
             case 'COMPLETED': return 'bg-green-100 text-green-700 border-green-200';
+            case 'SCHEDULED': return 'bg-emerald-100 text-emerald-800 border-emerald-200 font-extrabold';
             default: return 'bg-gray-100 text-gray-700';
         }
     };
@@ -32,7 +33,7 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({ data }) => {
             <div className="bg-white rounded-xl border border-border p-4 hover:shadow-md transition-all duration-200">
                 <div className="flex justify-between items-start mb-2">
                     <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-full border ${getStatusColor(data.status)}`}>
-                        {data.status === 'RESPONDED' ? 'doctor / nurse has answered' : data.status}
+                        {data.status === 'RESPONDED' ? 'doctor / nurse has answered' : data.status === 'SCHEDULED' ? 'Scheduled Call' : data.status}
                     </span>
                     <span className="text-xs text-text-secondary flex items-center">
                         <Calendar size={12} className="mr-1" />

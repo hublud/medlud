@@ -3,6 +3,7 @@
 import React, { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { getRedirectPath } from '@/utils/redirects';
 
 export default function OnboardingLayout({
     children,
@@ -18,50 +19,39 @@ export default function OnboardingLayout({
     useEffect(() => {
         if (loading) return;
 
-        // 1. If finished onboarding, go to dashboard (unless on completion success page)
-        if (user && profile?.onboarding_completed === true && pathname !== '/completion') {
-            console.log('[OnboardingLayout] Profile complete, redirecting to dashboard');
-            router.push('/dashboard');
-            return;
-        }
-
-        // 2. If NOT logged in and on a protected step page, send to login
+        // 1. If NOT logged in and on a protected step page, send to login
         const protectedStepPages = ['/health-profile', '/emergency-contact', '/permissions', '/completion'];
-        if (!user && !loading && protectedStepPages.includes(pathname)) {
+        if (!user && protectedStepPages.includes(pathname)) {
             console.log('[OnboardingLayout] Not logged in on protected page, redirecting to login');
             router.push('/login');
             return;
         }
 
-        // 3. If logged in but NOT finished — only redirect from pre-auth landing pages
-        if (user && profile?.onboarding_completed !== true) {
-            let currentStep = profile?.onboarding_step || 'health-profile';
-            // Rescue users stuck on basic-info
-            if (currentStep === 'basic-info') {
-                currentStep = 'health-profile';
-            }
-
-            const stepPaths: Record<string, string> = {
-                'verify-email': '/verify-email',
-                'health-profile': '/health-profile',
-                'emergency-contact': '/emergency-contact',
-                'permissions': '/permissions',
-                'completed': '/completion'
-            };
-            const targetPath = stepPaths[currentStep];
-
-            // Only redirect away from PRE-AUTH pages — never interfere with active step pages
+        // 2. If logged in, handle routing dynamically based on profile
+        if (user && profile) {
+            const redirectPath = getRedirectPath(profile);
             const preAuthPages = ['/welcome', '/account-type', '/login', '/signup', '/verify-email', '/basic-info'];
+
+            // Redirect away from pre-auth pages if logged in
             if (preAuthPages.includes(pathname)) {
-                console.log(`[OnboardingLayout] Redirecting from pre-auth page ${pathname} to step: ${targetPath}`);
-                if (targetPath) router.push(targetPath);
+                console.log(`[OnboardingLayout] Redirecting from pre-auth page ${pathname} to: ${redirectPath}`);
+                router.push(redirectPath);
                 return;
             }
 
-            // Show welcome toast once on first load of a step page
-            setShowWelcome(true);
-            const timer = setTimeout(() => setShowWelcome(false), 4000);
-            return () => clearTimeout(timer);
+            // Redirect if onboarding is complete but they are still on onboarding step pages (except /completion)
+            if (profile.onboarding_completed === true && pathname !== '/completion') {
+                console.log(`[OnboardingLayout] Onboarding complete, redirecting to: ${redirectPath}`);
+                router.push(redirectPath);
+                return;
+            }
+
+            // Show welcome toast on step pages once on first load
+            if (profile.onboarding_completed !== true) {
+                setShowWelcome(true);
+                const timer = setTimeout(() => setShowWelcome(false), 4000);
+                return () => clearTimeout(timer);
+            }
         }
     }, [user, profile, loading, pathname, router]);
 

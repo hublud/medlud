@@ -17,7 +17,10 @@ import {
     ArrowLeft,
     Activity,
     XCircle,
-    Tag
+    Tag,
+    Layers,
+    Pill,
+    Sliders
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -49,6 +52,7 @@ export default function StaffPortalPage() {
     const [activeCall, setActiveCall] = useState<any>(null);
     const [finishedCall, setFinishedCall] = useState<any>(null);
     const [doctorProfile, setDoctorProfile] = useState<any>(null);
+    const [staffInfo, setStaffInfo] = useState<any>(null);
     const [specialistRequests, setSpecialistRequests] = useState<any[]>([]);
     const callStartTime = useRef<number | null>(null);
     const notificationAudio = useRef<HTMLAudioElement | null>(null);
@@ -85,9 +89,11 @@ export default function StaffPortalPage() {
             if (user) {
                 const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
                 const { data: doctor } = await supabase.from('doctors').select('*').eq('id', user.id).single();
+                const { data: staffData } = await (supabase as any).from('facility_staff').select('*, facility:facilities(*)').eq('profile_id', user.id).eq('status', 'active').maybeSingle();
 
                 setDoctorProfile({ ...profile, ...doctor });
-                console.log('Current Dashboard User:', { uid: user.id, role: profile?.role, doctor });
+                setStaffInfo(staffData);
+                console.log('Current Dashboard User:', { uid: user.id, role: profile?.role, doctor, staffData });
             }
         };
 
@@ -703,6 +709,8 @@ export default function StaffPortalPage() {
                         </div>
                     </div>
                 </div>
+ 
+
 
                 {/* Main Content Area */}
                 <div className="flex flex-col lg:flex-row gap-8">

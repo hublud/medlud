@@ -1,6 +1,116 @@
-Found 5 Auth Users and 4 Profiles.
+Found 27 Auth Users and 26 Profiles.
 
 --- SYSTEM USERS ---
+Email: informhubludp@gmail.com
+   ID: ece93a4a-1e0d-41cc-977a-ad27a7092dc8
+   Auth Metadata Role: patient
+   DB Profile Role:    patient
+-----------------------------------
+Email: pharmacist@franclii.medlud.local
+   ID: c056be41-5af7-4cf5-b94c-95dd609a524a
+   Auth Metadata Role: pharmacist
+   DB Profile Role:    pharmacist
+-----------------------------------
+Email: labtech@franclii.medlud.local
+   ID: a0faee9d-99cd-4eb5-a949-99a975b3f39f
+   Auth Metadata Role: lab_tech
+   DB Profile Role:    lab_tech
+-----------------------------------
+Email: pharmacy@franclii.medlud.local
+   ID: cf1fb149-14a0-4111-82fa-8a1b34c2cf84
+   Auth Metadata Role: pharmacist
+   DB Profile Role:    pharmacist
+-----------------------------------
+Email: lab@franclii.medlud.local
+   ID: 64a39c40-1f3f-47fc-aaed-960544d5cba4
+   Auth Metadata Role: lab_tech
+   DB Profile Role:    lab_tech
+-----------------------------------
+Email: informhubludd@gmail.com
+   ID: c9460034-b1cf-4f3f-a0e6-b279421d941b
+   Auth Metadata Role: doctor
+   DB Profile Role:    doctor
+-----------------------------------
+Email: patient_joshuanwamifef_762082@medlud.local
+   ID: ec6e9faf-6ff2-45cc-babd-777927176b67
+   Auth Metadata Role: patient
+   DB Profile Role:    patient
+-----------------------------------
+Email: patient_joshuanwamife_542111@medlud.local
+   ID: ad275fcc-d27e-442a-bc9b-ca82d3549392
+   Auth Metadata Role: patient
+   DB Profile Role:    patient
+-----------------------------------
+Email: informhubludk@gmail.com
+   ID: 4a87924e-9df0-439e-a62c-2f4feb08b682
+   Auth Metadata Role: nurse
+   DB Profile Role:    nurse
+-----------------------------------
+Email: partner@medlud.com
+   ID: 320e05c1-75f0-4d66-a65a-1cf19d131da5
+   Auth Metadata Role: doctor
+   DB Profile Role:    doctor
+-----------------------------------
+Email: taxnigeria1@gmail.com
+   ID: 79439859-a1f5-4045-90fd-0d9662baf784
+   Auth Metadata Role: partner
+   DB Profile Role:    partner
+-----------------------------------
+Email: aliuibrahim582@gmail.com
+   ID: b7b70475-705d-4d3a-aedc-9ffc5d79de10
+   Auth Metadata Role: user
+   DB Profile Role:    user
+-----------------------------------
+Email: mrcourageokaka9@gmail.com
+   ID: 310721a5-8d96-469f-a831-f39616fd3437
+   Auth Metadata Role: user
+   DB Profile Role:    user
+-----------------------------------
+Email: test_onboarding@medlud.test
+   ID: 8d8cc916-3271-42d3-92bb-b03dcd8b86b5
+   Auth Metadata Role: patient
+   DB Profile Role:    patient
+-----------------------------------
+Email: test_onboarding_v1@hublud.com
+   ID: e441c175-3bd5-4ef0-a9c3-fba3870ad667
+   Auth Metadata Role: user
+   DB Profile Role:    user
+-----------------------------------
+Email: mediacontact74@gmail.com
+   ID: 52d1a689-2d22-46b4-b992-3a9b8b57f7ef
+   Auth Metadata Role: doctor
+   DB Profile Role:    doctor
+-----------------------------------
+Email: adewaleibrahim4120@gmail.com
+   ID: 5fbf4446-fcf8-4acd-a4d6-65de2bfde956
+   Auth Metadata Role: user
+   DB Profile Role:    user
+-----------------------------------
+Email: hubludclients@gmail.com
+   ID: ccd77474-c6b6-46d3-b849-a663666ffe2e
+   Auth Metadata Role: nurse
+   DB Profile Role:    nurse
+-----------------------------------
+Email: idealecoconsultant@gmail.com
+   ID: 468850bb-864d-4e3e-9a44-c33e6f8d8643
+   Auth Metadata Role: user
+   DB Profile Role:    user
+-----------------------------------
+Email: alicejohn945@gmail.com
+   ID: 4f936050-3c13-43fc-9050-d1980a64bf41
+   Auth Metadata Role: doctor
+   DB Profile Role:    doctor
+-----------------------------------
+Email: auduceo@gmail.com
+   ID: 206b4cba-e76a-4b6a-9bea-64362e5a6db5
+   Auth Metadata Role: user
+   DB Profile Role:    user
+-----------------------------------
+Email: courageokaka9@gmail.com
+   ID: c56d8a5d-bd3c-4091-b576-4e416c1de1b5
+   Auth Metadata Role: user
+   DB Profile Role:    user
+-----------------------------------
 Email: patient@medlud.com
    ID: a8a465be-7d40-4d7f-bcdd-4e32bc856d64
    Auth Metadata Role: patient
@@ -18,7 +128,7 @@ Email: mediacontact@gmail.com
 -----------------------------------
 Email: informhublud@gmail.com
    ID: 431ecdd2-56c9-4e20-9da9-0c0c958c65a3
-   Auth Metadata Role: N/A
+   Auth Metadata Role: user
    DB Profile Role:    MISSING
 -----------------------------------
 Email: joshuanwamife@gmail.com

@@ -30,6 +30,7 @@ export interface Appointment {
     duration?: string | null;
     severity?: string | null;
     medication_details?: string | null;
+    type?: string | null;
     date: string | null;
     status: string | null;
     priority?: string | null;

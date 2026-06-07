@@ -3,14 +3,14 @@ import { Mic, MicOff, Video, VideoOff, PhoneOff, MoreVertical, ShieldAlert, User
 import { Button } from '@/components/ui/Button';
 
 interface LiveCallScreenProps {
-    type: 'VIDEO' | 'VOICE';
+    type: string;
     onEndCall: (transcript: string) => void;
     agora: any;
 }
 
 export const LiveCallScreen: React.FC<LiveCallScreenProps> = ({ type, onEndCall, agora }) => {
     const [isMuted, setIsMuted] = useState(false);
-    const [isVideoEnabled, setIsVideoEnabled] = useState(type === 'VIDEO');
+    const [isVideoEnabled, setIsVideoEnabled] = useState(type.toUpperCase() === 'VIDEO');
     const [duration, setDuration] = useState(0);
     const [transcript, setTranscript] = useState('');
     const recognitionRef = useRef<any>(null);
@@ -122,7 +122,7 @@ export const LiveCallScreen: React.FC<LiveCallScreenProps> = ({ type, onEndCall,
                 </div>
 
                 {/* Self View (Video only) */}
-                {type === 'VIDEO' && isVideoEnabled && (
+                {type.toUpperCase() === 'VIDEO' && isVideoEnabled && (
                     <div className="absolute bottom-24 right-4 w-32 h-48 bg-gray-800 rounded-lg border-2 border-white/20 overflow-hidden shadow-lg">
                         <div ref={localVideoRef} className="w-full h-full" />
                         {!agora.localVideoTrack && (
@@ -149,7 +149,7 @@ export const LiveCallScreen: React.FC<LiveCallScreenProps> = ({ type, onEndCall,
                         {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
                     </button>
 
-                    {type === 'VIDEO' && (
+                    {type.toUpperCase() === 'VIDEO' && (
                         <button
                             onClick={toggleVideo}
                             className={`p-4 rounded-full transition-colors ${!isVideoEnabled ? 'bg-red-500 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}

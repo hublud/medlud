@@ -7,7 +7,7 @@ interface IncomingCallModalProps {
     call: {
         id: string;
         patient_id: string;
-        call_type: 'VIDEO' | 'VOICE';
+        call_type: string;
         channel_name: string;
         token: string;
         profiles?: {
@@ -58,7 +58,7 @@ export const IncomingCallModal: React.FC<IncomingCallModalProps> = ({ call, onAc
                         <h3 className="text-xl font-bold text-gray-900">{patientName}</h3>
                         <p className="text-primary font-medium flex items-center justify-center gap-2">
                             <Bell size={16} className="animate-bounce" />
-                            Incoming {call.call_type === 'VIDEO' ? 'Video' : 'Voice'} Call
+                            Incoming {call.call_type.toUpperCase() === 'VIDEO' ? 'Video' : 'Voice'} Call
                         </p>
                     </div>
                 </div>
@@ -79,7 +79,7 @@ export const IncomingCallModal: React.FC<IncomingCallModalProps> = ({ call, onAc
                         className="flex flex-col items-center justify-center p-4 rounded-2xl bg-primary hover:bg-primary-dark text-white transition-colors"
                     >
                         <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center mb-2 shadow-sm">
-                            {call.call_type === 'VIDEO' ? <Video size={24} /> : <Phone size={24} />}
+                            {call.call_type.toUpperCase() === 'VIDEO' ? <Video size={24} /> : <Phone size={24} />}
                         </div>
                         <span className="text-sm font-semibold">Accept</span>
                     </button>

@@ -53,6 +53,7 @@ interface Facility {
         longitude: number | null;
     };
     services?: Array<{ service_name: string }>;
+    profiles?: Array<{ id: string; email: string; role: string }>;
 }
 
 const PRESET_SERVICES = [
@@ -148,6 +149,7 @@ export default function AdminFacilitiesPage() {
     const [otherServices, setOtherServices] = useState('');
 
     const [submitting, setSubmitting] = useState(false);
+    const [invitingIds, setInvitingIds] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
         fetchInitialData();
@@ -160,14 +162,15 @@ export default function AdminFacilitiesPage() {
             const { data: typesData } = await db.from('facility_types').select('*');
             setFacilityTypes(typesData || []);
 
-            // 2. Fetch Facilities with Locations and Services
+            // 2. Fetch Facilities with Locations, Services, and Profiles
             const { data: facsData } = await db
                 .from('facilities')
                 .select(`
                     *,
                     facility_type:facility_types(*),
                     location:facility_locations(state, city, full_address, latitude, longitude),
-                    services:facility_services(service_name)
+                    services:facility_services(service_name),
+                    profiles:profiles(id, email, role)
                 `)
                 .order('created_at', { ascending: false });
 
@@ -335,7 +338,16 @@ export default function AdminFacilitiesPage() {
 
             setIsAddEditOpen(false);
             fetchInitialData();
-            alert(`Facility ${editingFacility ? 'updated' : 'created'} successfully!`);
+            
+            const isNew = !editingFacility;
+            if (isNew && email) {
+                const shouldInvite = confirm(`Facility created successfully!\n\nWould you like to send the account setup email to ${email} now?`);
+                if (shouldInvite) {
+                    await handleInviteFacility(savedFacilityId);
+                }
+            } else {
+                alert(`Facility ${editingFacility ? 'updated' : 'created'} successfully!`);
+            }
         } catch (err: any) {
             console.error('Error saving facility:', err);
             alert(`Error saving facility: ${err.message}`);
@@ -373,6 +385,41 @@ export default function AdminFacilitiesPage() {
         } catch (err: any) {
             console.error('Error updating status:', err);
             alert(`Failed to update status: ${err.message}`);
+        }
+    };
+
+    const handleInviteFacility = async (facilityId: string) => {
+        setInvitingIds(prev => ({ ...prev, [facilityId]: true }));
+        try {
+            const session = (await supabase.auth.getSession()).data.session;
+            const token = session?.access_token;
+
+            const res = await fetch('/api/admin/invite-facility', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ facilityId })
+            });
+
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.error || 'Failed to send invite.');
+            }
+
+            if (data.credentials) {
+                alert(`Invite sent successfully!\n\nCredentials:\nEmail: ${data.credentials.email}\nTemporary Password: ${data.credentials.password}\n\nPlease share these credentials or tell them to check their inbox.`);
+            } else {
+                alert(data.message || 'Onboarding email sent/resent successfully!');
+            }
+
+            fetchInitialData();
+        } catch (err: any) {
+            console.error('Invite facility error:', err);
+            alert(`Invitation failed: ${err.message}`);
+        } finally {
+            setInvitingIds(prev => ({ ...prev, [facilityId]: false }));
         }
     };
 
@@ -591,7 +638,20 @@ export default function AdminFacilitiesPage() {
                                                     </div>
                                                     <div>
                                                         <p className="font-bold text-slate-900 leading-tight">{fac.name}</p>
-                                                        <p className="text-xs text-slate-400 mt-0.5">{fac.email || 'No email'}</p>
+                                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                                            <span className="text-xs text-slate-400">{fac.email || 'No email'}</span>
+                                                            {fac.email && (
+                                                                fac.profiles && fac.profiles.length > 0 ? (
+                                                                    <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100/50" title="Account created and linked.">
+                                                                        <CheckCircle size={10} /> Active
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100/50" title="No user account setup yet. Click Mail icon to send access instructions.">
+                                                                        Pending Setup
+                                                                    </span>
+                                                                )
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </td>
@@ -651,6 +711,26 @@ export default function AdminFacilitiesPage() {
                                             </td>
                                             <td className="py-4 px-6 text-right">
                                                 <div className="flex items-center justify-end gap-2">
+                                                    {fac.email && (
+                                                        <button
+                                                            onClick={() => handleInviteFacility(fac.id)}
+                                                            disabled={invitingIds[fac.id]}
+                                                            title={fac.profiles && fac.profiles.length > 0 ? "Resend Account Setup Email" : "Send Account Setup Email"}
+                                                            className={`p-2 rounded-lg transition-colors ${
+                                                                invitingIds[fac.id] 
+                                                                    ? 'text-slate-350 cursor-not-allowed'
+                                                                    : fac.profiles && fac.profiles.length > 0
+                                                                        ? 'hover:bg-blue-50 text-slate-400 hover:text-blue-600'
+                                                                        : 'hover:bg-emerald-50 text-slate-400 hover:text-emerald-600'
+                                                            }`}
+                                                        >
+                                                            {invitingIds[fac.id] ? (
+                                                                <Loader2 size={16} className="animate-spin text-slate-500" />
+                                                            ) : (
+                                                                <Mail size={16} />
+                                                            )}
+                                                        </button>
+                                                    )}
                                                     {fac.status === 'active' || fac.status === 'approved' ? (
                                                         <button
                                                             onClick={() => handleToggleStatus(fac, 'suspended')}

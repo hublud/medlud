@@ -110,6 +110,8 @@ export const RecentActivity: React.FC = () => {
                 return { icon: Clock, color: 'text-yellow-600 bg-yellow-100', label: 'Pending' };
             case 'CANCELLED':
                 return { icon: AlertCircle, color: 'text-red-600 bg-red-100', label: 'Cancelled' };
+            case 'SCHEDULED':
+                return { icon: Calendar, color: 'text-emerald-700 bg-emerald-150', label: 'Scheduled Call' };
             default:
                 return { icon: Calendar, color: 'text-purple-600 bg-purple-100', label: status };
         }

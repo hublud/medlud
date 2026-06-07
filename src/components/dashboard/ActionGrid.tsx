@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Bot, Baby, BrainCircuit, Calendar, Video, MapPin, ArrowRight, ShieldCheck, Lock as LockIcon, LayoutDashboard, Crown, Stethoscope, Wallet } from 'lucide-react';
+import { Bot, Baby, BrainCircuit, Calendar, Video, MapPin, ArrowRight, ShieldCheck, Lock as LockIcon, LayoutDashboard, Crown, Stethoscope, Wallet, Pill, FlaskConical } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -123,20 +123,45 @@ export const ActionGrid: React.FC = () => {
 
     // Always show Maternal Health card (position 3, after Doctor and Telemedicine)
     // Add Staff Portal if user has a staff role
-    const staffRoles = ['nurse', 'nurse-assistant', 'doctor', 'mental-health'];
     const userRole = profile?.role || 'patient';
-    const isStaff = staffRoles.includes(userRole);
     const isStaffVerified = profile?.is_staff_verified === true;
     const isAdmin = userRole === 'admin';
 
-    const actions = [...baseActions.slice(0, 2), maternalAction, ...baseActions.slice(2)];
+    let actions = [...baseActions.slice(0, 2), maternalAction, ...baseActions.slice(2)];
 
-    if (isStaff) {
-        actions.push(staffAction);
-    }
+    if (userRole === 'pharmacist') {
+        actions = [
+            {
+                title: "Pharmacy Portal",
+                description: "View and dispense patient prescriptions",
+                icon: Pill,
+                color: "bg-emerald-100 text-emerald-600",
+                href: '/saas/dashboard/pharmacy',
+                isFeatured: true
+            }
+        ];
+    } else if (userRole === 'lab_tech') {
+        actions = [
+            {
+                title: "Labs Portal",
+                description: "Upload diagnostic findings and manage lab requests",
+                icon: FlaskConical,
+                color: "bg-emerald-100 text-emerald-600",
+                href: '/saas/dashboard/pharmacy',
+                isFeatured: true
+            }
+        ];
+    } else {
+        const staffRoles = ['nurse', 'nurse-assistant', 'doctor', 'mental-health'];
+        const isStaff = staffRoles.includes(userRole);
 
-    if (isAdmin) {
-        actions.push(adminAction);
+        if (isStaff) {
+            actions.push(staffAction);
+        }
+
+        if (isAdmin) {
+            actions.push(adminAction);
+        }
     }
 
     return (

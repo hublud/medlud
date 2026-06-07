@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, User, MessageSquare, Send, Loader2, Clock, Activity, FileText, AlertCircle, ShieldCheck, Stethoscope, Save, CheckCircle, Image as ImageIcon, Hospital } from 'lucide-react';
+import { ArrowLeft, User, MessageSquare, Send, Loader2, Clock, Activity, FileText, AlertCircle, ShieldCheck, Stethoscope, Save, CheckCircle, Image as ImageIcon, Hospital, Phone, Video, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { PrescriptionCard } from '@/components/appointments/PrescriptionCard';
 import { UploadResultModal } from '@/components/appointments/UploadResultModal';
@@ -143,6 +143,7 @@ export default function AppointmentDetailsPage() {
 
             // Fetch Referral Requests for this appointment
             fetchReferrals(id);
+            fetchUploadedResults(id);
 
         } catch (error: any) {
             console.error('Error fetching appointment (catch):', JSON.stringify(error, null, 2));
@@ -152,7 +153,33 @@ export default function AppointmentDetailsPage() {
     };
 
     const [referrals, setReferrals] = useState<any[]>([]);
+    const [uploadedResults, setUploadedResults] = useState<any[]>([]);
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+
+    const fetchUploadedResults = async (aptId: string) => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            const { data } = await (supabase as any)
+                .from('uploaded_medical_results')
+                .select(`
+                    *,
+                    referral_request:referral_requests(
+                        id,
+                        appointment_id,
+                        request_type,
+                        facility:facilities(name)
+                    )
+                `)
+                .eq('patient_id', user.id);
+
+            const filtered = (data || []).filter((r: any) => r.referral_request?.appointment_id === aptId);
+            setUploadedResults(filtered);
+        } catch (err) {
+            console.error('Error fetching uploaded medical results:', err);
+        }
+    };
 
     const fetchReferrals = async (aptId: string) => {
         try {
@@ -384,6 +411,60 @@ export default function AppointmentDetailsPage() {
                     </div>
                 )}
 
+                {/* Telemedicine Scheduled Call Banner */}
+                {appointment.status === 'SCHEDULED' && appointment.type && ['voice', 'video'].includes(appointment.type) && (
+                    <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-700 rounded-2xl p-6 text-white shadow-lg overflow-hidden relative border border-emerald-500/20">
+                        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="bg-white/20 p-2 rounded-xl backdrop-blur-md border border-white/10 animate-pulse">
+                                        {appointment.type === 'video' ? (
+                                            <Video size={20} className="text-white" />
+                                        ) : (
+                                            <Phone size={20} className="text-white" />
+                                        )}
+                                    </div>
+                                    <h2 className="text-xl font-bold tracking-tight">
+                                        Scheduled Telemedicine {appointment.type === 'video' ? 'Video' : 'Voice'} Call
+                                    </h2>
+                                </div>
+                                <p className="text-emerald-100/90 text-sm max-w-lg leading-relaxed font-medium">
+                                    Your provider, <strong className="text-white">{getDoctorName()}</strong>, has scheduled a live {appointment.type} consultation session. You can join the session room directly using the button below.
+                                </p>
+                                
+                                {/* Particulars Badge Grid */}
+                                <div className="flex flex-wrap gap-2.5 pt-1">
+                                    <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/20 text-xs font-semibold">
+                                        <Calendar size={13} className="text-emerald-250" />
+                                        <span>{appointment.date ? new Date(appointment.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : 'Pending'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/20 text-xs font-semibold">
+                                        <Clock size={13} className="text-emerald-250" />
+                                        <span>{appointment.date ? new Date(appointment.date).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : 'Pending'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/20 text-xs font-semibold">
+                                        <Activity size={13} className="text-emerald-250" />
+                                        <span>Duration: {appointment.duration || '30 mins'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="flex flex-col sm:flex-row items-stretch md:items-center gap-3">
+                                <Link 
+                                    href={`/dashboard/telemedicine/session/${appointment.id}`}
+                                    className="inline-flex items-center justify-center gap-2 bg-white hover:bg-emerald-50 text-emerald-800 font-extrabold px-6 py-3.5 rounded-xl transition-all shadow-md active:scale-95 group/btn"
+                                >
+                                    {appointment.type === 'video' ? <Video size={16} /> : <Phone size={16} />}
+                                    Join Session Room
+                                </Link>
+                            </div>
+                        </div>
+                        {/* Decorative Premium Glow Circles */}
+                        <div className="absolute -right-12 -top-12 w-48 h-48 bg-white/10 rounded-full blur-2xl" />
+                        <div className="absolute -left-12 -bottom-12 w-32 h-32 bg-emerald-500/20 rounded-full blur-xl" />
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Left Column: Case Details & History */}
                     <div className="lg:col-span-2 space-y-6">
@@ -561,6 +642,59 @@ export default function AppointmentDetailsPage() {
                                             >
                                                 Upload Results
                                             </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Uploaded Results Card */}
+                        {uploadedResults.length > 0 && (
+                            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
+                                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                                    <FileText size={16} className="text-indigo-650" /> Medical Reports & Results
+                                </h3>
+                                <div className="space-y-3">
+                                    {uploadedResults.map(result => (
+                                        <div key={result.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[9px] font-extrabold uppercase bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded">
+                                                    {result.result_type.replace('_', ' ')}
+                                                </span>
+                                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded ${
+                                                    result.status === 'reviewed' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
+                                                }`}>
+                                                    {result.status === 'reviewed' ? 'Reviewed' : 'Awaiting Review'}
+                                                </span>
+                                            </div>
+                                            
+                                            <div className="text-xs space-y-1">
+                                                <p className="font-semibold text-slate-700 truncate">
+                                                    📄 {result.file_name || 'Report Document'}
+                                                </p>
+                                                {result.referral_request?.facility?.name && (
+                                                    <p className="text-[10px] text-slate-405 font-bold">
+                                                        Source: {result.referral_request.facility.name}
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            <a 
+                                                href={result.file_url} 
+                                                target="_blank" 
+                                                rel="noreferrer" 
+                                                className="w-full bg-white hover:bg-slate-100 border text-slate-700 text-[10px] font-bold py-1.5 rounded-lg text-center transition-colors block"
+                                            >
+                                                View Document
+                                            </a>
+
+                                            {/* Doctor Review Notes if reviewed */}
+                                            {result.status === 'reviewed' && result.doctor_review_notes && (
+                                                <div className="bg-emerald-50 border border-emerald-100 p-2.5 rounded-lg text-[11px] text-emerald-800 space-y-1">
+                                                    <p className="font-bold uppercase tracking-wider text-[8px] text-emerald-600">Doctor's Review Notes</p>
+                                                    <p className="italic font-medium">"{result.doctor_review_notes}"</p>
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>

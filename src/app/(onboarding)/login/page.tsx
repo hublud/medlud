@@ -1,16 +1,19 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { User, Lock, ArrowRight, ChevronLeft, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
+import { getRedirectPath } from '@/utils/redirects';
 
 export default function LoginPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { signIn } = useAuth();
     const [loading, setLoading] = useState(false);
     const [email, setEmail] = useState('');
@@ -48,13 +51,35 @@ export default function LoginPage() {
             }
 
             console.log('Sign in successful, determining redirection path...');
-            const role = userProfile?.role || 'patient';
-            let targetPath = '/dashboard';
+            const redirectTo = searchParams?.get('redirectTo');
+            let targetPath = redirectTo || '/dashboard';
 
-            if (role === 'admin') {
-                targetPath = '/admin';
-            } else if (['doctor', 'nurse', 'nurse-assistant', 'mental-health'].includes(role)) {
-                targetPath = '/dashboard/staff';
+            if (!redirectTo) {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    const { data: dbProfile } = await (supabase as any)
+                        .from('profiles')
+                        .select('*')
+                        .eq('id', user.id)
+                        .maybeSingle();
+
+                    if (dbProfile) {
+                        try {
+                            const { data: staffData } = await (supabase as any)
+                                .from('facility_staff')
+                                .select('id, role, status, facility_id')
+                                .eq('profile_id', user.id)
+                                .eq('status', 'active')
+                                .maybeSingle();
+
+                            const fullProfile = { ...dbProfile, facility_staff: staffData };
+                            targetPath = getRedirectPath(fullProfile);
+                        } catch (e) {
+                            console.warn('Error fetching facility staff status on login:', e);
+                            targetPath = getRedirectPath(dbProfile);
+                        }
+                    }
+                }
             }
 
             console.log(`Redirecting to: ${targetPath}`);
@@ -105,9 +130,9 @@ export default function LoginPage() {
 
             <form onSubmit={handleLogin} className="space-y-4">
                 <Input
-                    label="Email Address"
-                    type="email"
-                    placeholder="Enter your email"
+                    label="Email Address or MED-ID"
+                    type="text"
+                    placeholder="Enter email or 7-digit Medical ID"
                     required
                     leftIcon={User}
                     value={email}
@@ -157,6 +182,8 @@ export default function LoginPage() {
                     Don't have an account? <Link href="/welcome" className="text-primary hover:underline font-medium">Get Started</Link>
                 </p>
             </div>
+
+
         </div>
     );
 }

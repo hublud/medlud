@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/Button';
 
@@ -11,6 +11,7 @@ export default function DashboardLayout({
     children: React.ReactNode;
 }) {
     const router = useRouter();
+    const pathname = usePathname();
     const { user, profile, loading } = useAuth();
 
     useEffect(() => {
@@ -30,9 +31,25 @@ export default function DashboardLayout({
             if (!user) {
                 console.log('[DashboardLayout] No user found, redirecting to login');
                 router.push('/login');
+            } else if (
+                profile?.facility_staff &&
+                !pathname.startsWith('/dashboard/staff/emr') &&
+                !pathname.startsWith('/dashboard/telemedicine/session') &&
+                !pathname.startsWith('/dashboard/telemedicine/print')
+            ) {
+                console.log('[DashboardLayout] SaaS facility staff detected on dashboard, redirecting to SaaS dashboard');
+                router.push('/saas/dashboard');
             } else if (userRole === 'admin') {
                 console.log('[DashboardLayout] Admin detected on user dashboard, redirecting to admin panel');
                 router.push('/admin');
+            } else if (userRole === 'partner' && pathname === '/dashboard') {
+                if (profile?.facility_staff) {
+                    console.log('[DashboardLayout] Partner with SaaS staff access detected on /dashboard, redirecting to SaaS dashboard');
+                    router.push('/saas/dashboard');
+                } else {
+                    console.log('[DashboardLayout] Partner detected on /dashboard, redirecting to partner dashboard');
+                    router.push('/dashboard/partner');
+                }
             } else if (profile && profile.onboarding_completed !== true && !isStaffOrAdmin) {
                 // Only redirect to onboarding if NOT staff/admin AND onboarding not completed
                 let currentStep = profile.onboarding_step || 'health-profile';
@@ -54,7 +71,7 @@ export default function DashboardLayout({
                 console.warn('[DashboardLayout] Profile missing for authenticated user');
             }
         }
-    }, [user, profile, loading, router]);
+    }, [user, profile, loading, router, pathname]);
 
     if (loading) {
         return (

@@ -41,7 +41,7 @@ export const useAgora = (appId: string | null) => {
     }, [appId]);
 
     const join = useCallback(
-        async (channel: string, token: string, uid: number, type: 'VIDEO' | 'VOICE') => {
+        async (channel: string, token: string, uid: number, type: string) => {
             if (!appId) throw new Error('Agora App ID not set');
 
             // Lazily create client if it hasn't been created yet
@@ -69,19 +69,29 @@ export const useAgora = (appId: string | null) => {
 
             client.on('user-published', async (user, mediaType) => {
                 await client.subscribe(user, mediaType);
-                if (mediaType === 'video') {
-                    setRemoteUsers(prev => [...prev.filter(u => u.uid !== user.uid), user]);
-                }
+                console.log('Agora: user-published:', user.uid, 'mediaType:', mediaType);
+                
+                setRemoteUsers(prev => {
+                    const exists = prev.some(u => u.uid === user.uid);
+                    if (exists) {
+                        return prev.map(u => u.uid === user.uid ? user : u);
+                    }
+                    return [...prev, user];
+                });
+
                 if (mediaType === 'audio') {
                     user.audioTrack?.play();
                 }
             });
 
-            client.on('user-unpublished', (user) => {
-                setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
+            client.on('user-unpublished', (user, mediaType) => {
+                console.log('Agora: user-unpublished:', user.uid, 'mediaType:', mediaType);
+                // Keep the user in the active list but update the user object in state
+                setRemoteUsers(prev => prev.map(u => u.uid === user.uid ? user : u));
             });
 
             client.on('user-left', (user) => {
+                console.log('Agora: user-left:', user.uid);
                 setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
             });
 
@@ -101,7 +111,7 @@ export const useAgora = (appId: string | null) => {
 
                 let tracksToPublish: any[] = [audioTrack];
 
-                if (type === 'VIDEO') {
+                if (type.toUpperCase() === 'VIDEO') {
                     const videoTrack = await AgoraRTC.createCameraVideoTrack().catch((err) => {
                         console.warn('Camera track creation failed (continuing audio-only):', err);
                         return null;

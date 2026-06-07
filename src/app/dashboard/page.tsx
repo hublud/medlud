@@ -1,5 +1,6 @@
 import React from 'react';
 import { Header } from '@/components/dashboard/Header';
+import { TodayTelemedicineBanner } from '@/components/dashboard/TodayTelemedicineBanner';
 import { ActionGrid } from '@/components/dashboard/ActionGrid';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
 import { HealthTips } from '@/components/dashboard/HealthTips';
@@ -10,6 +11,7 @@ export default function DashboardPage() {
         <div className="min-h-screen bg-background pb-32 animate-in fade-in duration-500">
             <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 font-sans">
                 <Header />
+                <TodayTelemedicineBanner />
 
                 <section className="mt-6">
                     <ActionGrid />

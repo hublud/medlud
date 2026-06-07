@@ -56,9 +56,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 if (error) throw error;
 
                 if (data) {
-                    setProfile(data);
+                    let staffData = null;
+                    try {
+                        const { data: staff } = await (supabase as any)
+                            .from('facility_staff')
+                            .select('id, role, status, facility_id')
+                            .eq('profile_id', userId)
+                            .eq('status', 'active')
+                            .maybeSingle();
+                        staffData = staff;
+                    } catch (staffErr) {
+                        console.warn('[Auth] Error fetching facility staff in context:', staffErr);
+                    }
+                    const fullProfile = { ...data, facility_staff: staffData };
+                    setProfile(fullProfile);
                     profileFetchedFor.current = userId;
-                    return data;
+                    return fullProfile;
                 }
 
                 // If no profile found, create one
@@ -229,9 +242,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
     };
 
-    const signIn = async (email: string, password: string) => {
+    const signIn = async (emailOrMedId: string, password: string) => {
+        let emailToUse = emailOrMedId.trim();
+
+        // Resolve numeric MED-ID to email
+        const isMedId = /^\d+$/.test(emailToUse) && !emailToUse.includes('@');
+        if (isMedId) {
+            const { data: profileData, error: profileErr } = await supabase
+                .from('profiles')
+                .select('email')
+                .eq('med_id', emailToUse)
+                .maybeSingle();
+
+            if (profileData?.email) {
+                emailToUse = profileData.email;
+            } else {
+                return {
+                    data: null,
+                    profile: null,
+                    error: new Error(`No registered account found with Medical ID: ${emailOrMedId}`)
+                };
+            }
+        }
+
         const { data, error } = await supabase.auth.signInWithPassword({
-            email,
+            email: emailToUse,
             password,
         });
 
