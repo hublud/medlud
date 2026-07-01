@@ -10,7 +10,7 @@ import { useAuth } from '@/context/AuthContext';
 interface ActivityItem {
     id: string;
     title: string;
-    date: string; // ISO string
+    date: string | null; // ISO string
     status: string;
     doctorName?: string;
     created_at?: string;

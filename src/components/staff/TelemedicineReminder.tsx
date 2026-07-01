@@ -13,8 +13,12 @@ export const TelemedicineReminder: React.FC = () => {
     const [dismissedAptIds, setDismissedAptIds] = useState<string[]>([]);
     const lastNotifiedAptId = useRef<string | null>(null);
 
-    // Verify if logged-in user is a doctor
-    const isDoctor = profile?.role === 'partner' || profile?.facility_staff?.role === 'doctor';
+    // Only true once profile has loaded AND the user is a doctor/partner
+    // profile === null means not yet loaded; profile === undefined or no role means not a doctor
+    const profileLoaded = profile !== null;
+    const isDoctor = profileLoaded && (
+        profile?.role === 'partner' || profile?.facility_staff?.role === 'doctor'
+    );
 
     const playChime = () => {
         try {
@@ -68,7 +72,10 @@ export const TelemedicineReminder: React.FC = () => {
     };
 
     useEffect(() => {
-        if (!user || !isDoctor) {
+        // Wait until profile has loaded before doing anything
+        if (!user || !profileLoaded) return;
+
+        if (!isDoctor) {
             setUpcomingApt(null);
             return;
         }
@@ -130,13 +137,12 @@ export const TelemedicineReminder: React.FC = () => {
                     setUpcomingApt(null);
                 }
             } catch (err: any) {
-                console.error('[Reminder] Error checking doctor schedules:', {
-                    message: err.message,
-                    code: err.code,
-                    details: err.details,
-                    hint: err.hint,
-                    error: err
-                });
+                // Supabase PostgrestError has non-enumerable properties — extract them explicitly
+                const errMessage = err?.message || err?.error_description || JSON.stringify(err);
+                console.warn(
+                    `[Reminder] Error checking doctor schedules: ${errMessage}`,
+                    { code: err?.code, details: err?.details, hint: err?.hint }
+                );
             }
         };
 
@@ -147,7 +153,7 @@ export const TelemedicineReminder: React.FC = () => {
         const interval = setInterval(checkSchedule, 30000);
         return () => clearInterval(interval);
 
-    }, [user, isDoctor, dismissedAptIds]);
+    }, [user, profileLoaded, isDoctor, dismissedAptIds]);
 
     if (!upcomingApt) return null;
 
