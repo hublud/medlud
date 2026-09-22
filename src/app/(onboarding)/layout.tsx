@@ -39,8 +39,11 @@ export default function OnboardingLayout({
                 return;
             }
 
-            // Redirect if onboarding is complete but they are still on onboarding step pages (except /completion)
-            if (profile.onboarding_completed === true && pathname !== '/completion') {
+            // Pages that are always accessible regardless of onboarding status
+            const alwaysAccessible = ['/forgot-password', '/completion'];
+
+            // Redirect if onboarding is complete but they are still on onboarding step pages
+            if (profile.onboarding_completed === true && !alwaysAccessible.includes(pathname)) {
                 console.log(`[OnboardingLayout] Onboarding complete, redirecting to: ${redirectPath}`);
                 router.push(redirectPath);
                 return;

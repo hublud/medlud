@@ -4,6 +4,36 @@ import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { getRedirectPath } from '@/utils/redirects';
+
+/** Fetches the user's profile and resolves where they should go after auth */
+async function resolveRedirectPath(userId: string): Promise<string> {
+    try {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+
+        if (!profile) return '/health-profile';
+
+        // Also check if they are active facility staff (SaaS portal users)
+        try {
+            const { data: staffData } = await (supabase as any)
+                .from('facility_staff')
+                .select('id')
+                .eq('profile_id', userId)
+                .eq('status', 'active')
+                .maybeSingle();
+
+            return getRedirectPath({ ...profile, facility_staff: staffData });
+        } catch {
+            return getRedirectPath(profile);
+        }
+    } catch {
+        return '/health-profile';
+    }
+}
 
 function CallbackHandler() {
     const router = useRouter();
@@ -21,7 +51,8 @@ function CallbackHandler() {
                 if (session) {
                     setStatus('success');
                     setMessage('You are already authenticated. Redirecting...');
-                    setTimeout(() => router.push('/health-profile'), 1000);
+                    const redirectPath = await resolveRedirectPath(session.user.id);
+                    setTimeout(() => router.push(redirectPath), 1000);
                     return;
                 }
                 
@@ -37,11 +68,14 @@ function CallbackHandler() {
 
                 if (data.session) {
                     setStatus('success');
-                    setMessage('Verification successful! One moment while we prepare your dashboard...');
+                    setMessage('Verification successful! One moment while we prepare your workspace...');
+                    
+                    // Resolve the correct destination based on user role
+                    const redirectPath = await resolveRedirectPath(data.session.user.id);
                     
                     // Small delay for visual confirmation of the "Success" state
                     setTimeout(() => {
-                        router.push('/health-profile');
+                        router.push(redirectPath);
                     }, 1500);
                 } else {
                     throw new Error('Could not establish a secure session.');

@@ -198,19 +198,33 @@ export default function AdminStaffPage() {
         setIsCreating(true);
 
         try {
-            const defaultPassword = 'MedLudStaff123!'; // Default password for new staff
-            const { data, error } = await (supabase.rpc as any)('create_staff_user', {
-                staff_email: formData.email,
-                staff_password: defaultPassword,
-                staff_full_name: formData.full_name,
-                staff_role: formData.role,
-                staff_phone: formData.phone || null
+            // Get the current session token so the API route can verify admin identity
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.access_token) {
+                throw new Error('Your session has expired. Please log in again.');
+            }
+
+            const response = await fetch('/api/admin/create-staff', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({
+                    full_name: formData.full_name,
+                    email: formData.email,
+                    role: formData.role,
+                    phone: formData.phone || undefined,
+                }),
             });
 
-            if (error) throw error;
-            if (data && !data.success) throw new Error(data.error || 'Failed to create staff');
+            const result = await response.json();
 
-            console.log('Staff created successfully:', data);
+            if (!response.ok) {
+                throw new Error(result.error || `Request failed (${response.status})`);
+            }
+
+            console.log('Staff created successfully:', result);
 
             // Reset form and close modal
             setFormData({ full_name: '', email: '', role: 'nurse', phone: '' });
@@ -218,10 +232,10 @@ export default function AdminStaffPage() {
 
             // Refresh list
             fetchStaff();
-            alert(`Staff created successfully!\n\nDefault Password: ${defaultPassword}\nPlease tell them to change it after first login.`);
+            alert(`Staff account created successfully!\n\nEmail: ${formData.email}\nDefault Password: ${result.default_password}\n\nPlease share these credentials with the staff member and ask them to change the password after first login.`);
         } catch (err: any) {
             console.error('Error creating staff:', err);
-            alert(err.message || 'Failed to create staff user.');
+            alert(err.message || 'Failed to create staff user. Please try again.');
         } finally {
             setIsCreating(false);
         }
